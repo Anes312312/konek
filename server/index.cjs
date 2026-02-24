@@ -380,16 +380,17 @@ io.on('connection', (socket) => {
     });
 });
 
-// Ruta de captura general para el frontend (SPA)
-// Debe ir al final de todos los endpoints y sockets
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
-
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 setupDatabase().then(database => {
     db = database;
+
+    // Ruta de captura general para el frontend (SPA)
+    // Debe ir al final de todos los endpoints y sockets
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../dist/index.html'));
+    });
+
     server.listen(PORT, '0.0.0.0', () => {
-        console.log(`Servidor Konek Fun corriendo en http://0.0.0.0:${PORT}`);
+        console.log(`Servidor Konek Fun corriendo en el puerto ${PORT}`);
     });
 });
