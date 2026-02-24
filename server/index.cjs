@@ -5,7 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs-extra');
 const multer = require('multer');
-const { setupDatabase } = require('./database');
+const { setupDatabase } = require('./database.cjs');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
