@@ -31,6 +31,13 @@ let db;
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// --- SERVIR ARCHIVOS ESTÁTICOS (PRODUCCIÓN) ---
+// Carpeta de archivos subidos (fotos de perfil, etc.)
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Servir el frontend compilado (Vite dist)
+app.use(express.static(path.join(__dirname, '../dist')));
+
 // --- API ENDPOINTS ---
 
 // Iniciar una carga de archivo grande
@@ -373,10 +380,16 @@ io.on('connection', (socket) => {
     });
 });
 
+// Ruta de captura general para el frontend (SPA)
+// Debe ir al final de todos los endpoints y sockets
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
 const PORT = 5000;
 setupDatabase().then(database => {
     db = database;
     server.listen(PORT, '0.0.0.0', () => {
-        console.log(`Servidor Konek corriendo en http://0.0.0.0:${PORT}`);
+        console.log(`Servidor Konek Fun corriendo en http://0.0.0.0:${PORT}`);
     });
 });

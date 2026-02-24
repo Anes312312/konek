@@ -4,7 +4,15 @@ const path = require('path');
 const fs = require('fs-extra');
 
 async function setupDatabase() {
-    const dbPath = path.join(__dirname, 'konek.db');
+    // Para persistencia en Render/Railway, usamos una carpeta de datos
+    const dataDir = process.env.PERSISTENT_DATA_PATH || __dirname;
+    const dbPath = path.join(dataDir, 'konek.db');
+
+    // Asegurar que el directorio existe
+    if (process.env.PERSISTENT_DATA_PATH) {
+        fs.ensureDirSync(dataDir);
+    }
+
     const db = await open({
         filename: dbPath,
         driver: sqlite3.Database

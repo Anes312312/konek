@@ -3,7 +3,9 @@ import io from 'socket.io-client';
 import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Camera } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-const SERVER_URL = 'http://localhost:5000'; // Ajustar según sea necesario
+const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? `http://${window.location.hostname}:5000`
+    : window.location.origin;
 
 function AdminDashboard() {
     const [adminUsers, setAdminUsers] = useState([]);

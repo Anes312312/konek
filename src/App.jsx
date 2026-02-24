@@ -14,8 +14,10 @@ const STATUS_FONTS = ['Inter', 'serif', 'cursive', 'monospace', 'Outfit'];
 import './index.css';
 
 
-// Configuración del servidor (usa la IP actual del navegador)
-const SERVER_URL = `http://${window.location.hostname}:5000`;
+// Configuración del servidor dinámica (detecta si es local o producción)
+const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? `http://${window.location.hostname}:5000`
+  : window.location.origin;
 
 function App() {
   const [messages, setMessages] = useState([]);
