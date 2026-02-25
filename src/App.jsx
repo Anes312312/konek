@@ -233,11 +233,17 @@ function App() {
 
     socketRef.current.on('login_success', (userData) => {
       setProfile(prev => ({ ...prev, role: userData.role, number: userData.phone_number || '' }));
-      // Si el servidor dice que ya tiene nombre, quizás ya no necesita onboarding
+      // Si el servidor dice que ya tiene nombre real y no es el default, quitamos onboarding
       if (userData.username && userData.username !== 'Mi Usuario') {
         localStorage.setItem('konek_setup_done', 'true');
         setShowOnboarding(false);
       }
+    });
+
+    socketRef.current.on('user_deleted', () => {
+      alert('Tu cuenta ha sido eliminada por el administrador.');
+      localStorage.clear();
+      window.location.reload();
     });
 
     socketRef.current.emit('request_statuses');

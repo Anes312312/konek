@@ -217,6 +217,9 @@ io.on('connection', (socket) => {
         await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
         await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
 
+        // Avisar al usuario específico que su cuenta ha sido eliminada para que sea expulsado
+        io.to(targetId).emit('user_deleted');
+
         const users = await db.all('SELECT * FROM users');
         io.emit('user_list', users);
 
