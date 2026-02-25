@@ -96,6 +96,7 @@ app.get('/api/download/:fileId/:fileName', async (req, res) => {
 
 // --- SOCKET.IO ---
 const onlineUsers = new Set();
+const tempDeletedIds = new Set(); // Evita que usuarios recién borrados se re-creen por re-conexiones automáticas
 
 io.on('connection', (socket) => {
     let currentUserId = null;
@@ -121,19 +122,27 @@ io.on('connection', (socket) => {
 
         // Guardar o actualizar usuario en DB
         try {
+            // Verificar si el ID está en la lista negra temporal de borrados
+            if (tempDeletedIds.has(userId)) {
+                socket.emit('error', { message: 'Esta sesión ha sido terminada.' });
+                socket.emit('user_deleted');
+                socket.disconnect(true);
+                return;
+            }
+
             const existing = await db.get('SELECT role, phone_number FROM users WHERE id = ?', [userId]);
             let role = existing ? existing.role : 'user';
             let finalPhoneNumber = existing?.phone_number;
 
-            // Auto-asignar admin si el nombre es 'Admin' (para configuración inicial)
-            if (profile.name.toLowerCase() === 'admin') {
-                role = 'admin';
+            // Si el perfil no existe y no es el primer join (trae un nombre por defecto), 
+            // no lo creamos si no tiene nombre real o si sospechamos que fue borrado
+            if (!existing && profile.name === 'Mi Usuario') {
+                // Es un usuario nuevo legítimo o uno borrado
             }
 
-            // Si es un usuario nuevo (no existe el phone_number en DB) y el cliente envía uno, lo usamos
-            // Pero si ya tiene uno asignado por el admin, ignoramos lo que envíe el cliente (es de solo lectura)
-            if (!finalPhoneNumber && phoneNumber) {
-                finalPhoneNumber = phoneNumber;
+            // Auto-asignar admin si el nombre es 'Admin'
+            if (profile.username !== 'Admin' && profile.name.toLowerCase() === 'admin') {
+                role = 'admin';
             }
 
             await db.run(
@@ -218,18 +227,16 @@ io.on('connection', (socket) => {
         await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
         await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
 
-        // Forzar desconexión física si están online
+        // Añadir a lista negra temporal para evitar re-creación inmediata por sockets persistentes
+        tempDeletedIds.add(targetId);
+        setTimeout(() => tempDeletedIds.delete(targetId), 60000); // 1 minuto de bloqueo
+
+        // Forzar desconexión física de todos los sockets en esa "habitación"
         io.to(targetId).emit('user_deleted');
 
-        // Dar un pequeño margen para que el socket reciba el aviso antes de cerrar
-        setTimeout(() => {
-            const sockets = io.sockets.sockets;
-            for (const [id, s] of sockets) {
-                if (s.rooms.has(targetId)) {
-                    s.disconnect(true);
-                }
-            }
-        }, 500);
+        // Desconexión inmediata de sockets asociados a ese ID
+        const sockets = await io.in(targetId).fetchSockets();
+        sockets.forEach(s => s.disconnect(true));
 
         const users = await db.all('SELECT * FROM users');
         io.emit('user_list', users);
