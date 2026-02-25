@@ -205,13 +205,25 @@ function App() {
     });
 
     socketRef.current.on('user_list', (users) => {
-      // Actualizar la lista de contactos locales con la información más reciente del servidor
+      // Actualizar la lista de contactos locales: Eliminar los que ya no existen en el servidor
       setAvailableUsers(prev => {
-        return prev.map(contact => {
+        // Mantenemos solo los usuarios que el servidor nos envía o el chat global
+        return prev.filter(contact =>
+          contact.id === 'global' || users.some(u => u.id === contact.id)
+        ).map(contact => {
           const updatedUser = users.find(u => u.id === contact.id);
           return updatedUser ? updatedUser : contact;
         });
       });
+
+      // Si el chat activo fue el usuario eliminado, lo cerramos
+      if (activeChatRef.current && activeChatRef.current.id !== 'global') {
+        const stillExists = users.some(u => u.id === activeChatRef.current.id);
+        if (!stillExists) {
+          alert('Este usuario ya no está disponible.');
+          setActiveChat(null);
+        }
+      }
 
       // ¡NUEVO! Sincronizar mi propio perfil si el admin lo cambió desde el panel
       const me = users.find(u => u.id === userId);
