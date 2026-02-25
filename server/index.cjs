@@ -13,6 +13,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- SEGURIDAD ANTI-CRASH ---
+process.on('uncaughtException', (err) => {
+    console.error('[CRÍTICO] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[CRÍTICO] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Directorio para archivos subidos (configurado para persistencia en el servidor nube)
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 fs.ensureDirSync(UPLOADS_DIR);
@@ -482,11 +490,20 @@ io.on('connection', (socket) => {
 
 // Ruta de captura general para el frontend (SPA)
 app.use((req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+    // Si es una ruta de API o archivos, dejar pasar
+    if (req.url.startsWith('/api') || req.url.startsWith('/uploads') || req.url.startsWith('/socket.io')) {
         return next();
     }
+
     const indexPath = path.resolve(__dirname, '..', 'dist', 'index.html');
-    res.sendFile(indexPath);
+
+    // Verificar si el archivo existe antes de enviarlo para evitar 500/503 por errores de FS
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        console.error(`[Error] index.html no encontrado en: ${indexPath}`);
+        res.status(404).send('La aplicación no ha sido compilada correctamente (falta dist/index.html)');
+    }
 });
 
 const PORT = process.env.PORT || 5000;
