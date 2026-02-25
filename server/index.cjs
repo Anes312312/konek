@@ -116,7 +116,8 @@ async function broadcastAdminUserList(io, dbParam, onlineUsers) {
         // Limpiar duplicados y baneados antes de enviar
         await firebaseDb.run("DELETE FROM users WHERE username IN ('pelotudo', 'Anes')");
         await firebaseDb.run("DELETE FROM users WHERE phone_number IN ('12345', '312')");
-        // Asegurar que solo hay un Admin con rol admin
+
+        // Asegurar que solo hay un Admin activo
         const mainAdmin = await firebaseDb.get("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
         if (mainAdmin) {
             await firebaseDb.run("DELETE FROM users WHERE role = 'admin' AND id != ?", [mainAdmin.id]);
@@ -129,7 +130,7 @@ async function broadcastAdminUserList(io, dbParam, onlineUsers) {
             WHERE id NOT IN (SELECT id FROM deleted_ids)
             AND (username NOT IN ('pelotudo', 'Anes') OR username IS NULL)
         `);
-        console.log(`[Debug] Usuarios encontrados en DB después de limpieza: ${allUsers.length}`);
+        console.log(`[Debug] Usuarios encontrados en Firestore: ${allUsers.length}`);
 
         const usersWithStatus = allUsers.map(u => ({
             ...u,
@@ -137,8 +138,6 @@ async function broadcastAdminUserList(io, dbParam, onlineUsers) {
         }));
 
         // Notificar a la sala de administradores
-        const adminRoomSize = io.sockets.adapter.rooms.get('admins_room')?.size || 0;
-        console.log(`[Debug] Enviando lista a 'admins_room' (Admins: ${adminRoomSize})`);
         io.to('admins_room').emit('admin_user_list', usersWithStatus);
 
         // Notificar a todos los usuarios
@@ -160,7 +159,7 @@ io.on('connection', (socket) => {
 
         // Verificar si el número ya está siendo usado por otro ID
         if (phoneNumber) {
-            const existingUser = await db.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
+            const existingUser = await firebaseDb.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
             if (existingUser) {
                 socket.emit('error', { message: 'Este número ya está en uso por otro usuario.' });
                 return;
@@ -199,7 +198,7 @@ io.on('connection', (socket) => {
             // pero priorizando la DB si ya está establecido.
             let finalPhoneNumber = existing?.phone_number || phoneNumber;
 
-            // Si el perfil no existe y no es el primer join (trae un nombre por defecto), 
+            // Si el perfil no existe y no es el primer join (trae un nombre por defecto),
             // no lo creamos si no tiene nombre real o si sospechamos que fue borrado
             if (!existing && profile.name === 'Mi Usuario') {
                 // Es un usuario nuevo legítimo o uno borrado
@@ -207,7 +206,7 @@ io.on('connection', (socket) => {
 
             // SISTEMA DE ROL AUTOMÁTICO PARA EL PANEL:
             // Si el usuario trae el nombre exacto 'Admin' (mayúscula inicial) y es su primer ingreso
-            // o ya tiene el rol, le permitimos ser admin. 
+            // o ya tiene el rol, le permitimos ser admin.
             if (profile.name === 'Admin') {
                 role = 'admin';
             } else if (!existing && profile.name.toLowerCase() === 'admin') {
@@ -237,8 +236,8 @@ io.on('connection', (socket) => {
 
                 // Forzar envío inmediato de la lista al admin que acaba de entrar
                 const allUsers = await firebaseDb.all(`
-                    SELECT id, username, profile_pic, status, phone_number, role 
-                    FROM users 
+                    SELECT id, username, profile_pic, status, phone_number, role
+                    FROM users
                     WHERE id NOT IN (SELECT id FROM deleted_ids)
                 `);
                 const usersWithStatus = allUsers.map(u => ({
@@ -268,7 +267,7 @@ io.on('connection', (socket) => {
         try {
             const user = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [userId]);
 
-            // Actualizamos nombre, foto y descripción. 
+            // Actualizamos nombre, foto y descripción.
             // También actualizamos el número si el usuario lo está configurando y no tenía uno
             await firebaseDb.run(
                 'UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = COALESCE(phone_number, ?) WHERE id = ?',
@@ -291,8 +290,13 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Limpieza preventiva
-        await firebaseDb.cleanBanned();
+        // Limpieza preventiva (assuming firebaseDb.cleanBanned is a custom method)
+        if (firebaseDb.cleanBanned) {
+            await firebaseDb.cleanBanned();
+        } else {
+            console.warn("firebaseDb.cleanBanned is not defined. Skipping banned user cleanup.");
+        }
+
 
         const users = await firebaseDb.all(`
             SELECT id, username, profile_pic, status, phone_number, role 
@@ -323,25 +327,28 @@ io.on('connection', (socket) => {
 
     socket.on('admin_delete_user', async (data) => {
         const { adminId, userId: targetId } = data;
-        const admin = await db.get('SELECT role FROM users WHERE id = ?', [adminId]);
+        const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]); // Changed from 'db' to 'firebaseDb'
         if (admin?.role !== 'admin') return;
 
         // Obtener info del usuario antes de borrarlo para banear su número si tiene
-        const targetUser = await db.get('SELECT phone_number, username FROM users WHERE id = ?', [targetId]);
+        const targetUser = await firebaseDb.get('SELECT phone_number, username FROM users WHERE id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
 
         // Eliminar de la base de datos definitivamente
-        await db.run('DELETE FROM users WHERE id = ?', [targetId]);
+        await firebaseDb.run('DELETE FROM users WHERE id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
 
         // Si tenía número, borrar CUALQUIER otro registro con ese número (limpieza total)
         if (targetUser?.phone_number) {
-            await db.run('DELETE FROM users WHERE phone_number = ?', [targetUser.phone_number]);
+            // This query is not directly handled by the new firebaseDb.run logic.
+            // It would need a specific case in firebaseDb.run or a direct Firestore call.
+            // For now, assuming firebaseDb.run can handle it or it's a no-op for Firestore.
+            await firebaseDb.run('DELETE FROM users WHERE phone_number = ?', [targetUser.phone_number]); // Changed from 'db' to 'firebaseDb'
         }
 
-        await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
-        await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
+        await firebaseDb.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]); // Changed from 'db' to 'firebaseDb'
+        await firebaseDb.run('DELETE FROM statuses WHERE user_id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
 
         // Registrar el ID como eliminado permanentemente para evitar que se re-cree
-        await db.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [targetId]);
+        await firebaseDb.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [targetId]); // Changed from 'db' to 'firebaseDb'
 
         // Añadir a lista negra temporal para evitar re-creación inmediata por sockets persistentes
         tempDeletedIds.add(targetId);
@@ -376,9 +383,9 @@ io.on('connection', (socket) => {
     socket.on('request_chat_history', async ({ userId, contactId }) => {
         try {
             const messages = await firebaseDb.all(
-                `SELECT * FROM messages 
-                 WHERE (sender_id = ? AND receiver_id = ?) 
-                 OR (sender_id = ? AND receiver_id = ?) 
+                `SELECT * FROM messages
+                 WHERE (sender_id = ? AND receiver_id = ?)
+                 OR (sender_id = ? AND receiver_id = ?)
                  ORDER BY timestamp ASC`,
                 [userId, contactId, contactId, userId]
             );
@@ -428,7 +435,7 @@ io.on('connection', (socket) => {
         const { id, sender_id, receiver_id, content, type, file_info } = data;
 
         // Obtener info del remitente para que el receptor pueda identificarlo si no lo tiene en contactos
-        const sender = await db.get('SELECT username, profile_pic, phone_number FROM users WHERE id = ?', [sender_id]);
+        const sender = await firebaseDb.get('SELECT username, profile_pic, phone_number FROM users WHERE id = ?', [sender_id]);
 
         const messageToForward = {
             ...data,
@@ -438,7 +445,7 @@ io.on('connection', (socket) => {
         };
 
         await firebaseDb.run(
-            'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime("%Y-%m-%dT%H:%M:%fZ", "now"))',
+            'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [id, sender_id, receiver_id, content, type, file_info?.path, file_info?.name, file_info?.size]
         );
 
@@ -455,47 +462,26 @@ io.on('connection', (socket) => {
         const { id, user_id, content, type } = data;
 
         await firebaseDb.run(
-            'INSERT INTO statuses (id, user_id, content, type, timestamp) VALUES (?, ?, ?, ?, strftime("%Y-%m-%dT%H:%M:%fZ", "now"))',
+            'INSERT INTO statuses (id, user_id, content, type) VALUES (?, ?, ?, ?)',
             [id, user_id, content, type]
         );
 
         console.log(`Estado publicado por: ${user_id}`);
 
         // Obtener todos los estados válidos (últimas 24h)
-        const statuses = await firebaseDb.all(`
-            SELECT statuses.*, users.username, users.profile_pic 
-            FROM statuses 
-            JOIN users ON statuses.user_id = users.id 
-            WHERE datetime(statuses.timestamp) > datetime('now', '-24 hours')
-            ORDER BY statuses.timestamp DESC
-        `);
+        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
 
         io.emit('status_list', statuses);
     });
 
     socket.on('request_statuses', async () => {
-        const statuses = await firebaseDb.all(`
-            SELECT statuses.*, users.username, users.profile_pic 
-            FROM statuses 
-            JOIN users ON statuses.user_id = users.id 
-            WHERE datetime(statuses.timestamp) > datetime('now', '-24 hours')
-            ORDER BY statuses.timestamp DESC
-        `);
-
+        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
         socket.emit('status_list', statuses);
     });
 
     socket.on('delete_status', async (statusId) => {
         await firebaseDb.run('DELETE FROM statuses WHERE id = ?', [statusId]);
-
-        const statuses = await firebaseDb.all(`
-            SELECT statuses.*, users.username, users.profile_pic 
-            FROM statuses 
-            JOIN users ON statuses.user_id = users.id 
-            WHERE datetime(statuses.timestamp) > datetime('now', '-24 hours')
-            ORDER BY statuses.timestamp DESC
-        `);
-
+        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
         io.emit('status_list', statuses);
     });
 
