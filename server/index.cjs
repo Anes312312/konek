@@ -102,17 +102,33 @@ app.get('/api/download/:fileId/:fileName', async (req, res) => {
 const onlineUsers = new Set();
 const tempDeletedIds = new Set(); // Evita que usuarios recién borrados se re-creen por re-conexiones automáticas
 
+// LISTA NEGRA DEFINITIVA DE SEGURIDAD
+const BANNED_NAMES = ['pelotudo', 'Anes'];
+const BANNED_NUMBERS = ['12345', '312'];
+
 // Función global para notificar a los admins y usuarios sobre cambios en el censo
 async function broadcastAdminUserList(io, db, onlineUsers) {
     if (!db) return;
     try {
         console.log('[Debug] Ejecutando broadcastAdminUserList...');
+
+        // Limpiar duplicados y baneados antes de enviar
+        await db.run("DELETE FROM users WHERE username IN ('pelotudo', 'Anes')");
+        await db.run("DELETE FROM users WHERE phone_number IN ('12345', '312')");
+        // Asegurar que solo hay un Admin con rol admin
+        const mainAdmin = await db.get("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
+        if (mainAdmin) {
+            await db.run("DELETE FROM users WHERE role = 'admin' AND id != ?", [mainAdmin.id]);
+            await db.run("UPDATE users SET role = 'user' WHERE username = 'Admin' AND id != ?", [mainAdmin.id]);
+        }
+
         const allUsers = await db.all(`
             SELECT id, username, profile_pic, status, phone_number, role 
             FROM users 
             WHERE id NOT IN (SELECT id FROM deleted_ids)
+            AND (username NOT IN ('pelotudo', 'Anes') OR username IS NULL)
         `);
-        console.log(`[Debug] Usuarios encontrados en DB: ${allUsers.length}`);
+        console.log(`[Debug] Usuarios encontrados en DB después de limpieza: ${allUsers.length}`);
 
         const usersWithStatus = allUsers.map(u => ({
             ...u,
@@ -121,13 +137,12 @@ async function broadcastAdminUserList(io, db, onlineUsers) {
 
         // Notificar a la sala de administradores
         const adminRoomSize = io.sockets.adapter.rooms.get('admins_room')?.size || 0;
-        console.log(`[Debug] Enviando lista a 'admins_room' (Admins conectados: ${adminRoomSize})`);
+        console.log(`[Debug] Enviando lista a 'admins_room' (Admins: ${adminRoomSize})`);
         io.to('admins_room').emit('admin_user_list', usersWithStatus);
 
-        // Notificar a todos los usuarios para actualizar sus listas de contactos
+        // Notificar a todos los usuarios
         io.emit('user_list', allUsers);
 
-        console.log(`[Sistema] Lista de usuarios sincronizada. Total: ${allUsers.length}`);
     } catch (error) {
         console.error('[Error] Error al difundir lista de usuarios:', error);
     }
@@ -157,6 +172,14 @@ io.on('connection', (socket) => {
 
         // Guardar o actualizar usuario en DB
         try {
+            // BLOQUEO ESTRICTO: Rechazar nombres o números baneados
+            if (BANNED_NAMES.includes(profile.name) || BANNED_NUMBERS.includes(phoneNumber)) {
+                console.log(`[Bloqueo] Intento de conexión con datos baneados: ${profile.name} / ${phoneNumber}`);
+                socket.emit('error', { message: 'Esta cuenta/nombre ha sido prohibido por el administrador.' });
+                socket.disconnect(true);
+                return;
+            }
+
             // Verificar si el ID está en la lista negra temporal o permanente de borrados
             const isBannedForever = await db.get('SELECT id FROM deleted_ids WHERE id = ?', [userId]);
             if (tempDeletedIds.has(userId) || isBannedForever) {
