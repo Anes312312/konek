@@ -155,6 +155,12 @@ io.on('connection', (socket) => {
             const userData = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
             socket.emit('login_success', userData);
 
+            // Si es un admin, unirlo a la sala especial para recibir actualizaciones masivas
+            if (userData.role === 'admin') {
+                socket.join('admins_room');
+                console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username}`);
+            }
+
             console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
         } catch (error) {
             console.error('Error al unir usuario:', error);
@@ -165,6 +171,13 @@ io.on('connection', (socket) => {
         const allUsers = await db.all('SELECT id, username, profile_pic, status, phone_number, role FROM users');
         io.emit('user_list', allUsers);
         io.emit('online_count', onlineUsers.size);
+
+        // Si el que se acaba de unir es admin, enviarle también la lista completa inmediatamente
+        const uCurrent = await db.get('SELECT role FROM users WHERE id = ?', [userId]);
+        if (uCurrent?.role === 'admin') {
+            const usersWithStatus = allUsers.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
+            socket.emit('admin_user_list', usersWithStatus);
+        }
     });
 
     socket.on('update_profile', async (data) => {
@@ -198,6 +211,7 @@ io.on('connection', (socket) => {
             isOnline: onlineUsers.has(u.id)
         }));
         socket.emit('admin_user_list', usersWithStatus);
+        console.log(`[Admin] Lista completa de usuarios enviada a admin ${adminId}`);
     });
 
     socket.on('admin_update_user', async (data) => {
@@ -248,7 +262,9 @@ io.on('connection', (socket) => {
         io.emit('user_list', users);
 
         const usersWithStatus = users.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
-        socket.emit('admin_user_list', usersWithStatus);
+        // Sincronizar todos los paneles de administración abiertos
+        io.to('admins_room').emit('admin_user_list', usersWithStatus);
+        console.log(`[Seguridad] Usuario ${targetId} eliminado definitivamente por Admin ${adminId}`);
     });
 
     socket.on('admin_create_user', async (data) => {
