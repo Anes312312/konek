@@ -137,7 +137,7 @@ io.on('connection', (socket) => {
             }
 
             await db.run(
-                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status',
+                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status, role=excluded.role',
                 [userId, profile.name, profile.photo, profile.description, finalPhoneNumber, role]
             );
 
@@ -213,12 +213,23 @@ io.on('connection', (socket) => {
         const admin = await db.get('SELECT role FROM users WHERE id = ?', [adminId]);
         if (admin?.role !== 'admin') return;
 
+        // Eliminar de la base de datos definitivamente
         await db.run('DELETE FROM users WHERE id = ?', [targetId]);
         await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
         await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
 
-        // Avisar al usuario específico que su cuenta ha sido eliminada para que sea expulsado
+        // Forzar desconexión física si están online
         io.to(targetId).emit('user_deleted');
+
+        // Dar un pequeño margen para que el socket reciba el aviso antes de cerrar
+        setTimeout(() => {
+            const sockets = io.sockets.sockets;
+            for (const [id, s] of sockets) {
+                if (s.rooms.has(targetId)) {
+                    s.disconnect(true);
+                }
+            }
+        }, 500);
 
         const users = await db.all('SELECT * FROM users');
         io.emit('user_list', users);
