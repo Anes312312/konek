@@ -40,24 +40,29 @@ const firebaseDb = {
 
         // --- CONSULTA DE USUARIOS ---
         if (query.includes('FROM users')) {
-            let userQuery = db.collection('users');
+            try {
+                // FAKE NOT IN (SELECT id FROM deleted_ids)
+                const deletedSnap = await db.collection('deleted_ids').get();
+                const deletedIds = deletedSnap.docs.map(doc => doc.id);
 
-            // FAKE NOT IN (SELECT id FROM deleted_ids)
-            const deletedSnap = await db.collection('deleted_ids').get();
-            const deletedIds = deletedSnap.docs.map(doc => doc.id);
+                const snap = await db.collection('users').get();
+                let users = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const snap = await db.collection('users').get();
-            let users = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Filtramos manualmente por bloqueados y eliminados
+                const BANNED_NAMES = ['pelotudo', 'Anes'];
+                const BANNED_NUMBERS = ['12345', '312'];
 
-            // Filtramos manualmente por bloqueados y eliminados
-            const BANNED_NAMES = ['pelotudo', 'Anes'];
-            const BANNED_NUMBERS = ['12345', '312'];
-
-            return users.filter(u =>
-                !deletedIds.includes(u.id) &&
-                !BANNED_NAMES.includes(u.username) &&
-                !BANNED_NUMBERS.includes(u.phone_number)
-            );
+                const filtered = users.filter(u =>
+                    !deletedIds.includes(u.id) &&
+                    !BANNED_NAMES.includes(u.username) &&
+                    !BANNED_NUMBERS.includes(u.phone_number)
+                );
+                console.log(`[Firebase Debug] all(users): Encontrados ${users.length}, filtrados ${filtered.length}`);
+                return filtered;
+            } catch (err) {
+                console.error('[Firebase Error] Error en all(users):', err.message);
+                return [];
+            }
         }
 
         // --- CONSULTA DE MENSAJES ---
@@ -161,7 +166,7 @@ const firebaseDb = {
         }
 
         // LIMPIEZA DE ADMINS DUPLICADOS
-        if (query.includes('DELETE FROM users WHERE role = \'admin\' AND id != ?')) {
+        if (query.includes('DELETE FROM users WHERE') && query.includes('role = \'admin\'')) {
             const idToKeep = params[0];
             const snap = await db.collection('users').where('role', '==', 'admin').get();
             const batch = db.batch();
@@ -185,23 +190,39 @@ const firebaseDb = {
             const data = {};
 
             if (query.includes('INSERT')) {
-                const [idVal, username, profile_pic, status, phone_number, role] = params;
-                data.username = username;
-                data.profile_pic = profile_pic;
-                data.status = status;
-                data.phone_number = phone_number;
-                data.role = role;
+                // Mapeo inteligente de parámetros según su cantidad
+                if (params.length === 6) {
+                    const [idVal, username, profile_pic, status, phone_number, role] = params;
+                    data.username = username;
+                    data.profile_pic = profile_pic;
+                    data.status = status;
+                    data.phone_number = phone_number;
+                    data.role = role;
+                } else if (params.length === 4) {
+                    // Caso admin_create_user
+                    const [idVal, username, phone_number, role] = params;
+                    data.username = username;
+                    data.phone_number = phone_number;
+                    data.role = role;
+                }
             } else {
-                // Update simple (mapeamos campos por nombre en query si es posible o asumimos orden)
-                if (query.includes('role = ?')) data.role = params[2];
+                // Update simple
                 if (query.includes('username = ?')) data.username = params[0];
                 if (query.includes('profile_pic = ?')) data.profile_pic = params[1];
                 if (query.includes('status = ?')) data.status = params[2];
+                if (query.includes('role = ?')) {
+                    // El role suele ser el 3er parámetro en el update de admin o el 5to si es insert...
+                    // pero aquí lo buscamos por índice específico según el query del admin_update_user
+                    if (query.includes('phone_number = ?, role = ?')) data.role = params[2];
+                    else data.role = params[0]; // fallback
+                }
                 if (query.includes('phone_number = ?')) {
-                    // COALESCE handling o update directo
                     data.phone_number = params[query.includes('COALESCE') ? 3 : 1];
                 }
             }
+
+            // Eliminar campos undefined para evitar errores de Firestore
+            Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
 
             await db.collection('users').doc(id).set(data, { merge: true });
             return;

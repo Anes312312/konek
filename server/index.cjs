@@ -111,40 +111,33 @@ const BANNED_NUMBERS = ['12345', '312'];
 async function broadcastAdminUserList(io, dbParam, onlineUsers) {
     if (!firebaseDb) return;
     try {
-        console.log('[Debug] Ejecutando broadcastAdminUserList...');
+        console.log('[Admin Debug] Ejecutando broadcastAdminUserList...');
 
-        // Limpiar duplicados y baneados antes de enviar
-        await firebaseDb.run("DELETE FROM users WHERE username IN ('pelotudo', 'Anes')");
-        await firebaseDb.run("DELETE FROM users WHERE phone_number IN ('12345', '312')");
+        // Asegurar que solo hay un Admin activo y limpiar baneados
+        const users = await firebaseDb.all(`SELECT id, username, phone_number, role FROM users`);
 
-        // Asegurar que solo hay un Admin activo
-        const mainAdmin = await firebaseDb.get("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
-        if (mainAdmin) {
-            await firebaseDb.run("DELETE FROM users WHERE role = 'admin' AND id != ?", [mainAdmin.id]);
-            await firebaseDb.run("UPDATE users SET role = 'user' WHERE username = 'Admin' AND id != ?", [mainAdmin.id]);
-        }
+        const allUsers = users.filter(u => {
+            const isBanned = ['pelotudo', 'Anes'].includes(u.username) || ['12345', '312'].includes(u.phone_number);
+            return !isBanned;
+        });
 
-        const allUsers = await firebaseDb.all(`
-            SELECT id, username, profile_pic, status, phone_number, role 
-            FROM users 
-            WHERE id NOT IN (SELECT id FROM deleted_ids)
-            AND (username NOT IN ('pelotudo', 'Anes') OR username IS NULL)
-        `);
-        console.log(`[Debug] Usuarios encontrados en Firestore: ${allUsers.length}`);
+        console.log(`[Admin Debug] Usuarios en Firestore (tras filtro baneados): ${allUsers.length}`);
 
         const usersWithStatus = allUsers.map(u => ({
             ...u,
+            role: u.role || 'user',
             isOnline: onlineUsers.has(u.id)
         }));
 
         // Notificar a la sala de administradores
         io.to('admins_room').emit('admin_user_list', usersWithStatus);
+        console.log(`[Admin Debug] Lista enviada a admins_room. Usuarios online detectados: ${[...onlineUsers].join(', ')}`);
 
         // Notificar a todos los usuarios
-        io.emit('user_list', allUsers);
+        io.emit('user_list', allUsers.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) })));
 
     } catch (error) {
-        console.error('[Error] Error al difundir lista de usuarios:', error);
+        console.error('[Admin Error] Error al difundir lista de usuarios:', error);
     }
 }
 
@@ -220,31 +213,23 @@ io.on('connection', (socket) => {
             );
 
             const userData = await firebaseDb.get('SELECT * FROM users WHERE id = ?', [userId]);
+            console.log(`[Seguridad] Verificando rol de ${profile.name}: ${userData?.role}`);
+
             socket.emit('login_success', userData);
 
             // Si es un admin, unirlo a la sala especial para recibir actualizaciones masivas
-            if (userData.role === 'admin') {
+            if (userData && (userData.role === 'admin' || profile.name === 'Admin')) {
                 await socket.join('admins_room');
-                console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username} (ID: ${userId})`);
-
-                // LIMPIEZA AGRESIVA DE DUPLICADOS: Solo puede haber un admin total
-                // Borramos cualquier otro usuario que se llame 'Admin' o tenga rol 'admin'
-                await firebaseDb.run(
-                    "DELETE FROM users WHERE (username = 'Admin' OR role = 'admin') AND id != ?",
-                    [userId]
-                );
+                console.log(`[Seguridad] Admin detectado y suscrito: ${userData?.username || profile.name} (ID: ${userId})`);
 
                 // Forzar envío inmediato de la lista al admin que acaba de entrar
-                const allUsers = await firebaseDb.all(`
-                    SELECT id, username, profile_pic, status, phone_number, role
-                    FROM users
-                    WHERE id NOT IN (SELECT id FROM deleted_ids)
-                `);
+                const allUsers = await firebaseDb.all(`SELECT * FROM users`);
                 const usersWithStatus = allUsers.map(u => ({
                     ...u,
+                    role: u.role || 'user',
                     isOnline: onlineUsers.has(u.id)
                 }));
-                console.log(`[Debug] Enviando lista inicial directamente al admin ${userId} (${usersWithStatus.length} usuarios)`);
+                console.log(`[Admin Debug] Enviando lista inicial directamente al admin ${userId} (${usersWithStatus.length} usuarios)`);
                 socket.emit('admin_user_list', usersWithStatus);
             }
 
