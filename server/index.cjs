@@ -17,153 +17,146 @@ process.on('uncaughtException', (err) => {
     console.error('[CRÍTICO] Uncaught Exception:', err);
 });
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[CRÍTICO] Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('[CRÍTICO] Unhandled Rejection:', reason);
 });
 
-// Directorio para archivos subidos (configurado para persistencia en el servidor nube)
+// Directorio para archivos subidos
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 fs.ensureDirSync(UPLOADS_DIR);
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ["https://konek.fun", "http://localhost:5173"],
+        origin: ["https://konek.fun", "http://localhost:5173", "http://localhost:5000"],
         methods: ["GET", "POST"],
         credentials: true
     },
-    maxHttpBufferSize: 1e8 // 100MB buffer
+    maxHttpBufferSize: 1e8
 });
 
-// Confianza en el proxy para despliegues en la nube (Render/Vercel)
 app.set('trust proxy', 1);
 
-const db = firebaseDb;
-
-// Configuración de Multer para recibir trozos (chunks)
+// Configuración de Multer
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// --- SERVIR ARCHIVOS ESTÁTICOS (PRODUCCIÓN) ---
-// Carpeta de archivos subidos (fotos de perfil, etc.)
+// --- ARCHIVOS ESTÁTICOS ---
 app.use('/uploads', express.static(UPLOADS_DIR));
-
-// Servir el frontend compilado (Vite dist)
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // --- API ENDPOINTS ---
 
-// Iniciar una carga de archivo grande
 app.post('/api/upload/init', async (req, res) => {
-    const { fileName, totalSize, id } = req.body;
-    const fileId = id || uuidv4();
-    const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
-
-    // Crear archivo vacío
-    await fs.writeFile(filePath, '');
-
-    await db.run(
-        'INSERT INTO uploads (id, file_name, total_size, status) VALUES (?, ?, ?, ?)',
-        [fileId, fileName, totalSize, 'uploading']
-    );
-
-    res.json({ fileId, filePath });
-});
-
-// Recibir un trozo (chunk) del archivo
-app.post('/api/upload/chunk', upload.single('chunk'), async (req, res) => {
-    const { fileId, fileName } = req.body;
-    const chunk = req.file.buffer;
-
-    const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
-
-    // Append del trozo al archivo final
-    await fs.appendFile(filePath, chunk);
-
-    // Actualizar progreso en DB
-    await db.run(
-        'UPDATE uploads SET current_size = current_size + ? WHERE id = ?',
-        [chunk.length, fileId]
-    );
-
-    const uploadStatus = await db.get('SELECT current_size, total_size FROM uploads WHERE id = ?', [fileId]);
-
-    if (uploadStatus.current_size >= uploadStatus.total_size) {
-        await db.run('UPDATE uploads SET status = ? WHERE id = ?', ['completed', fileId]);
+    try {
+        const { fileName, totalSize, id } = req.body;
+        const fileId = id || uuidv4();
+        const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
+        await fs.writeFile(filePath, '');
+        await firebaseDb.run(
+            'INSERT INTO uploads (id, file_name, total_size, status) VALUES (?, ?, ?, ?)',
+            [fileId, fileName, totalSize, 'uploading']
+        );
+        res.json({ fileId, filePath });
+    } catch (error) {
+        console.error('[API Error] upload/init:', error.message);
+        res.status(500).json({ error: 'Error al iniciar carga' });
     }
-
-    res.json({ success: true, received: chunk.length });
 });
 
-// Descargar archivo
-app.get('/api/download/:fileId/:fileName', async (req, res) => {
-    const { fileId, fileName } = req.params;
-    const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
+app.post('/api/upload/chunk', upload.single('chunk'), async (req, res) => {
+    try {
+        const { fileId, fileName } = req.body;
+        const chunk = req.file?.buffer;
+        if (!chunk) return res.status(400).json({ error: 'No chunk received' });
 
-    if (await fs.pathExists(filePath)) {
-        res.download(filePath, fileName);
-    } else {
-        res.status(404).send('Archivo no encontrado');
+        const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
+        await fs.appendFile(filePath, chunk);
+        await firebaseDb.run(
+            'UPDATE uploads SET current_size = current_size + ? WHERE id = ?',
+            [chunk.length, fileId]
+        );
+
+        const uploadStatus = await firebaseDb.get('SELECT current_size, total_size FROM uploads WHERE id = ?', [fileId]);
+        if (uploadStatus && uploadStatus.current_size >= uploadStatus.total_size) {
+            await firebaseDb.run('UPDATE uploads SET status = ? WHERE id = ?', ['completed', fileId]);
+        }
+
+        res.json({ success: true, received: chunk.length });
+    } catch (error) {
+        console.error('[API Error] upload/chunk:', error.message);
+        res.status(500).json({ error: 'Error al procesar chunk' });
+    }
+});
+
+app.get('/api/download/:fileId/:fileName', async (req, res) => {
+    try {
+        const { fileId, fileName } = req.params;
+        const filePath = path.join(UPLOADS_DIR, fileId + '_' + fileName);
+        if (await fs.pathExists(filePath)) {
+            res.download(filePath, fileName);
+        } else {
+            res.status(404).send('Archivo no encontrado');
+        }
+    } catch (error) {
+        console.error('[API Error] download:', error.message);
+        res.status(500).send('Error al descargar');
     }
 });
 
 // --- SOCKET.IO ---
 const onlineUsers = new Set();
-const tempDeletedIds = new Set(); // Evita que usuarios recién borrados se re-creen por re-conexiones automáticas
+const tempDeletedIds = new Set();
 
-// LISTA NEGRA DEFINITIVA DE SEGURIDAD
 const BANNED_NAMES = ['pelotudo', 'Anes'];
 const BANNED_NUMBERS = ['12345', '312'];
 
-// Función global para notificar a los admins y usuarios sobre cambios en el censo
-async function broadcastAdminUserList(io, dbParam, onlineUsers) {
-    if (!firebaseDb) return;
+// Función para enviar lista de usuarios a admins y a todos
+async function broadcastAdminUserList(ioInstance) {
     try {
-        console.log('[Admin Debug] Ejecutando broadcastAdminUserList...');
+        const users = await firebaseDb.all('SELECT * FROM users');
+        if (!users) return;
 
-        // Asegurar que solo hay un Admin activo y limpiar baneados
-        const users = await firebaseDb.all(`SELECT id, username, phone_number, role FROM users`);
-
-        const allUsers = users.filter(u => {
-            const isBanned = ['pelotudo', 'Anes'].includes(u.username) || ['12345', '312'].includes(u.phone_number);
-            return !isBanned;
-        });
-
-        console.log(`[Admin Debug] Usuarios en Firestore (tras filtro baneados): ${allUsers.length}`);
-
-        const usersWithStatus = allUsers.map(u => ({
+        const usersWithStatus = users.map(u => ({
             ...u,
             role: u.role || 'user',
             isOnline: onlineUsers.has(u.id)
         }));
 
-        // Notificar a la sala de administradores
-        io.to('admins_room').emit('admin_user_list', usersWithStatus);
-        console.log(`[Admin Debug] Lista enviada a admins_room. Usuarios online detectados: ${[...onlineUsers].join(', ')}`);
-
-        // Notificar a todos los usuarios
-        io.emit('user_list', allUsers.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) })));
-
+        ioInstance.to('admins_room').emit('admin_user_list', usersWithStatus);
+        ioInstance.emit('user_list', usersWithStatus);
+        console.log(`[Broadcast] Lista enviada: ${usersWithStatus.length} usuarios, ${onlineUsers.size} online`);
     } catch (error) {
-        console.error('[Admin Error] Error al difundir lista de usuarios:', error);
+        console.error('[Broadcast Error]:', error.message);
     }
 }
 
 io.on('connection', (socket) => {
     let currentUserId = null;
 
+    // ==========================================
+    // JOIN - Conexión de usuario
+    // ==========================================
     socket.on('join', async (data) => {
         let step = 'inicio';
         try {
             const { userId, profile } = data;
-            step = 'parsing datos';
+            if (!userId || !profile) {
+                socket.emit('error', { message: 'Datos de conexión inválidos' });
+                return;
+            }
 
-            // Asegurar que el número vacío se guarde como null para evitar conflictos de UNIQUE
-            const phoneNumber = (profile.number && String(profile.number).trim() !== '') ? String(profile.number).trim() : null;
+            step = 'parsing';
+            const phoneNumber = (profile.number && String(profile.number).trim() !== '')
+                ? String(profile.number).trim()
+                : null;
 
-            // Verificar si el número ya está siendo usado por otro ID
+            // Verificar número duplicado
             if (phoneNumber) {
-                step = 'verificar número duplicado';
-                const existingUser = await firebaseDb.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
+                step = 'verificar duplicado';
+                const existingUser = await firebaseDb.get(
+                    'SELECT id FROM users WHERE phone_number = ? AND id != ?',
+                    [phoneNumber, userId]
+                );
                 if (existingUser) {
                     socket.emit('error', { message: 'Este número ya está en uso por otro usuario.' });
                     return;
@@ -174,201 +167,223 @@ io.on('connection', (socket) => {
             socket.join(userId);
             onlineUsers.add(userId);
 
-            // BLOQUEO ESTRICTO: Rechazar nombres o números baneados
+            // Bloqueo de nombres/números baneados
             if (BANNED_NAMES.includes(profile.name) || BANNED_NUMBERS.includes(phoneNumber)) {
-                console.log(`[Bloqueo] Intento de conexión con datos baneados: ${profile.name} / ${phoneNumber}`);
-                socket.emit('error', { message: 'Esta cuenta/nombre ha sido prohibido por el administrador.' });
+                console.log(`[Bloqueo] Datos baneados: ${profile.name} / ${phoneNumber}`);
+                socket.emit('error', { message: 'Esta cuenta ha sido prohibida.' });
+                onlineUsers.delete(userId);
                 socket.disconnect(true);
                 return;
             }
 
-            // Verificar si el ID está en la lista negra temporal o permanente de borrados
-            step = 'verificar deleted_ids';
+            // Verificar si fue eliminado
+            step = 'verificar eliminado';
             let isBannedForever = null;
             try {
                 isBannedForever = await firebaseDb.get('SELECT id FROM deleted_ids WHERE id = ?', [userId]);
             } catch (e) {
-                console.warn('[Warn] Error al verificar deleted_ids, ignorando:', e.message);
+                console.warn('[Warn] Error al verificar deleted_ids:', e.message);
             }
 
             if (tempDeletedIds.has(userId) || isBannedForever) {
-                console.log(`Intento de conexión rechazado (ID eliminado): ${userId}`);
+                console.log(`[Bloqueo] ID eliminado: ${userId}`);
                 socket.emit('error', { message: 'Esta cuenta ha sido desactivada por el administrador.' });
                 socket.emit('user_deleted');
+                onlineUsers.delete(userId);
                 socket.disconnect(true);
                 return;
             }
 
-            step = 'buscar usuario existente';
+            // Obtener usuario existente
+            step = 'buscar existente';
             const existing = await firebaseDb.get('SELECT role, phone_number FROM users WHERE id = ?', [userId]);
             let role = existing ? (existing.role || 'user') : 'user';
-
             let finalPhoneNumber = existing?.phone_number || phoneNumber || '';
 
-            // SISTEMA DE ROL AUTOMÁTICO PARA EL PANEL:
+            // Asignación automática de rol Admin
             if (profile.name === 'Admin') {
                 role = 'admin';
             } else if (!existing && typeof profile.name === 'string' && profile.name.toLowerCase() === 'admin') {
-                role = 'user';
+                role = 'user'; // No permitir nuevos "admin" con nombre similar
             }
 
-            step = 'insertar/actualizar usuario';
+            // Guardar/actualizar usuario
+            step = 'guardar usuario';
             await firebaseDb.run(
-                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status, role=excluded.role, phone_number=COALESCE(users.phone_number, excluded.phone_number)',
+                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET',
                 [userId, profile.name || 'Usuario', profile.photo || '', profile.description || '', finalPhoneNumber, role]
             );
 
-            step = 'obtener datos de usuario';
+            // Leer datos actualizados
+            step = 'leer usuario';
             const userData = await firebaseDb.get('SELECT * FROM users WHERE id = ?', [userId]);
-            console.log(`[Seguridad] Verificando rol de ${profile.name}: ${userData?.role}`);
+            const userResponse = userData || { id: userId, username: profile.name || 'Usuario', role: role };
 
-            socket.emit('login_success', userData || { id: userId, username: profile.name, role: role });
+            console.log(`[Join] ${userResponse.username} (${userId}) rol=${userResponse.role}`);
+            socket.emit('login_success', userResponse);
 
-            // Si es un admin, unirlo a la sala especial para recibir actualizaciones masivas
-            if ((userData && userData.role === 'admin') || profile.name === 'Admin') {
+            // Si es admin, suscribir a sala de admins
+            if (userResponse.role === 'admin' || profile.name === 'Admin') {
                 step = 'configurar admin';
                 socket.join('admins_room');
-                console.log(`[Seguridad] Admin detectado y suscrito: ${userData?.username || profile.name} (ID: ${userId})`);
+                console.log(`[Admin] Suscrito: ${userResponse.username} (${userId})`);
 
-                step = 'obtener lista de usuarios para admin';
-                const allUsers = await firebaseDb.all(`SELECT * FROM users`);
+                step = 'lista para admin';
+                const allUsers = await firebaseDb.all('SELECT * FROM users');
                 const usersWithStatus = (allUsers || []).map(u => ({
                     ...u,
                     role: u.role || 'user',
                     isOnline: onlineUsers.has(u.id)
                 }));
-                console.log(`[Admin Debug] Enviando lista inicial directamente al admin ${userId} (${usersWithStatus.length} usuarios)`);
                 socket.emit('admin_user_list', usersWithStatus);
+                console.log(`[Admin] Lista enviada: ${usersWithStatus.length} usuarios`);
             }
 
-            console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
-
             step = 'broadcast';
-            await broadcastAdminUserList(io, db, onlineUsers);
+            await broadcastAdminUserList(io);
             io.emit('online_count', onlineUsers.size);
+
         } catch (error) {
-            console.error(`[Error Crítico] Error en socket.on(join) paso="${step}":`, error);
+            console.error(`[Error Join] paso="${step}":`, error.message, error.stack);
             socket.emit('error', { message: `Error al unirse (${step}): ${error.message}` });
         }
     });
 
-
+    // ==========================================
+    // UPDATE PROFILE
+    // ==========================================
     socket.on('update_profile', async (data) => {
         try {
             const { userId, profile } = data;
-            const user = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [userId]);
+            if (!userId || !profile) return;
 
             await firebaseDb.run(
                 'UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = COALESCE(phone_number, ?) WHERE id = ?',
-                [profile.name, profile.photo, profile.description, profile.number || null, userId]
+                [profile.name || 'Usuario', profile.photo || '', profile.description || '', profile.number || '', userId]
             );
 
-            await broadcastAdminUserList(io, firebaseDb, onlineUsers);
+            await broadcastAdminUserList(io);
         } catch (error) {
-            console.error('[Error Crítico] Error en update_profile:', error);
+            console.error('[Error] update_profile:', error.message);
             socket.emit('error', { message: 'Error al actualizar perfil.' });
         }
     });
 
-    // --- ADMIN EVENTS ---
+    // ==========================================
+    // ADMIN EVENTS
+    // ==========================================
 
     socket.on('admin_get_all_users', async (adminId) => {
-        if (!firebaseDb) return;
-        const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
-        if (admin?.role !== 'admin') {
-            console.log(`[Seguridad] Intento de acceso denegado a lista de usuarios por ID: ${adminId}`);
-            return;
+        try {
+            if (!adminId) return;
+            const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
+            if (admin?.role !== 'admin') {
+                console.log(`[Seguridad] Acceso denegado: ${adminId}`);
+                return;
+            }
+
+            // Limpiar baneados
+            if (firebaseDb.cleanBanned) await firebaseDb.cleanBanned();
+
+            const users = await firebaseDb.all('SELECT * FROM users');
+            const usersWithStatus = (users || []).map(u => ({
+                ...u,
+                isOnline: onlineUsers.has(u.id)
+            }));
+            socket.emit('admin_user_list', usersWithStatus);
+            console.log(`[Admin] Lista manual: ${usersWithStatus.length} usuarios para ${adminId}`);
+        } catch (error) {
+            console.error('[Error] admin_get_all_users:', error.message);
         }
-
-        // Limpieza preventiva (assuming firebaseDb.cleanBanned is a custom method)
-        if (firebaseDb.cleanBanned) {
-            await firebaseDb.cleanBanned();
-        } else {
-            console.warn("firebaseDb.cleanBanned is not defined. Skipping banned user cleanup.");
-        }
-
-
-        const users = await firebaseDb.all(`
-            SELECT id, username, profile_pic, status, phone_number, role 
-            FROM users 
-            WHERE id NOT IN (SELECT id FROM deleted_ids)
-        `);
-        const usersWithStatus = users.map(u => ({
-            ...u,
-            isOnline: onlineUsers.has(u.id)
-        }));
-        socket.emit('admin_user_list', usersWithStatus);
-        console.log(`[Admin] Solicitud manual de lista recibida de admin ${adminId}. Enviando ${users.length} usuarios.`);
     });
 
     socket.on('admin_update_user', async (data) => {
-        const { adminId, userId, update } = data;
-        const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
-        if (admin?.role !== 'admin') return;
+        try {
+            const { adminId, userId, update } = data;
+            if (!adminId || !userId) return;
 
-        const { username, phone_number, role } = update;
-        await firebaseDb.run(
-            'UPDATE users SET username = ?, phone_number = ?, role = ? WHERE id = ?',
-            [username, phone_number, role, userId]
-        );
+            const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
+            if (admin?.role !== 'admin') return;
 
-        await broadcastAdminUserList(io, firebaseDb, onlineUsers);
+            const { username, phone_number, role } = update;
+            await firebaseDb.run(
+                'UPDATE users SET username = ?, phone_number = ?, role = ? WHERE id = ?',
+                [username || 'Usuario', phone_number || '', role || 'user', userId]
+            );
+
+            await broadcastAdminUserList(io);
+            console.log(`[Admin] Usuario ${userId} actualizado por ${adminId}`);
+        } catch (error) {
+            console.error('[Error] admin_update_user:', error.message);
+        }
     });
 
     socket.on('admin_delete_user', async (data) => {
-        const { adminId, userId: targetId } = data;
-        const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]); // Changed from 'db' to 'firebaseDb'
-        if (admin?.role !== 'admin') return;
+        try {
+            const { adminId, userId: targetId } = data;
+            if (!adminId || !targetId) return;
 
-        // Obtener info del usuario antes de borrarlo para banear su número si tiene
-        const targetUser = await firebaseDb.get('SELECT phone_number, username FROM users WHERE id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
+            const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
+            if (admin?.role !== 'admin') return;
 
-        // Eliminar de la base de datos definitivamente
-        await firebaseDb.run('DELETE FROM users WHERE id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
+            const targetUser = await firebaseDb.get('SELECT phone_number, username FROM users WHERE id = ?', [targetId]);
 
-        // Si tenía número, borrar CUALQUIER otro registro con ese número (limpieza total)
-        if (targetUser?.phone_number) {
-            // This query is not directly handled by the new firebaseDb.run logic.
-            // It would need a specific case in firebaseDb.run or a direct Firestore call.
-            // For now, assuming firebaseDb.run can handle it or it's a no-op for Firestore.
-            await firebaseDb.run('DELETE FROM users WHERE phone_number = ?', [targetUser.phone_number]); // Changed from 'db' to 'firebaseDb'
+            // Eliminar usuario
+            await firebaseDb.run('DELETE FROM users WHERE id = ?', [targetId]);
+
+            // Si tenía número, limpiar registros relacionados
+            if (targetUser?.phone_number) {
+                await firebaseDb.run('DELETE FROM users WHERE phone_number = ?', [targetUser.phone_number]);
+            }
+
+            // Eliminar mensajes y estados
+            await firebaseDb.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
+            await firebaseDb.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
+
+            // Registrar como eliminado permanente
+            await firebaseDb.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [targetId]);
+
+            // Bloqueo temporal
+            tempDeletedIds.add(targetId);
+            setTimeout(() => tempDeletedIds.delete(targetId), 60000);
+
+            // Forzar desconexión
+            io.to(targetId).emit('user_deleted');
+            const sockets = await io.in(targetId).fetchSockets();
+            sockets.forEach(s => s.disconnect(true));
+            onlineUsers.delete(targetId);
+
+            await broadcastAdminUserList(io);
+            console.log(`[Admin] Usuario ${targetId} (${targetUser?.username}) eliminado por ${adminId}`);
+        } catch (error) {
+            console.error('[Error] admin_delete_user:', error.message);
         }
-
-        await firebaseDb.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]); // Changed from 'db' to 'firebaseDb'
-        await firebaseDb.run('DELETE FROM statuses WHERE user_id = ?', [targetId]); // Changed from 'db' to 'firebaseDb'
-
-        // Registrar el ID como eliminado permanentemente para evitar que se re-cree
-        await firebaseDb.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [targetId]); // Changed from 'db' to 'firebaseDb'
-
-        // Añadir a lista negra temporal para evitar re-creación inmediata por sockets persistentes
-        tempDeletedIds.add(targetId);
-        setTimeout(() => tempDeletedIds.delete(targetId), 60000); // 1 minuto de bloqueo
-
-        // Forzar desconexión física de todos los sockets en esa "habitación"
-        io.to(targetId).emit('user_deleted');
-
-        // Desconexión inmediata de sockets asociados a ese ID
-        const sockets = await io.in(targetId).fetchSockets();
-        sockets.forEach(s => s.disconnect(true));
-        onlineUsers.delete(targetId);
-
-        await broadcastAdminUserList(io, firebaseDb, onlineUsers);
-        console.log(`[Seguridad] Usuario ${targetId} (${targetUser?.username}) eliminado definitivamente por Admin ${adminId}`);
     });
 
     socket.on('admin_create_user', async (data) => {
-        const { adminId, newUser } = data;
-        const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
-        if (admin?.role !== 'admin') return;
+        try {
+            const { adminId, newUser } = data;
+            if (!adminId) return;
 
-        const { id, username, phone_number, role } = newUser;
-        await firebaseDb.run(
-            'INSERT INTO users (id, username, phone_number, role) VALUES (?, ?, ?, ?)',
-            [id || uuidv4(), username, phone_number, role || 'user']
-        );
+            const admin = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [adminId]);
+            if (admin?.role !== 'admin') return;
 
-        await broadcastAdminUserList(io, firebaseDb, onlineUsers);
+            const { id, username, phone_number, role } = newUser;
+            await firebaseDb.run(
+                'INSERT INTO users (id, username, phone_number, role) VALUES (?, ?, ?, ?)',
+                [id || uuidv4(), username || 'Nuevo Usuario', phone_number || '', role || 'user']
+            );
+
+            await broadcastAdminUserList(io);
+            console.log(`[Admin] Usuario creado: ${username} por ${adminId}`);
+        } catch (error) {
+            console.error('[Error] admin_create_user:', error.message);
+        }
     });
+
+    // ==========================================
+    // CHAT / MENSAJES
+    // ==========================================
 
     socket.on('request_chat_history', async ({ userId, contactId }) => {
         try {
@@ -379,13 +394,10 @@ io.on('connection', (socket) => {
                  ORDER BY timestamp ASC`,
                 [userId, contactId, contactId, userId]
             );
-
-            // También necesitamos la info del remitente para cada mensaje si no la tenemos
-            // pero el cliente ya maneja el filtrado de mensajes guardados localmente.
-            // Para asegurar consistencia total con f5, devolvemos los mensajes.
-            socket.emit('chat_history', { contactId, messages });
+            socket.emit('chat_history', { contactId, messages: messages || [] });
         } catch (error) {
-            console.error('Error al obtener historial:', error);
+            console.error('[Error] request_chat_history:', error.message);
+            socket.emit('chat_history', { contactId, messages: [] });
         }
     });
 
@@ -394,107 +406,132 @@ io.on('connection', (socket) => {
             const messages = await firebaseDb.all(
                 'SELECT * FROM messages WHERE receiver_id = "global" ORDER BY timestamp ASC'
             );
-            socket.emit('chat_history', { contactId: 'global', messages });
+            socket.emit('chat_history', { contactId: 'global', messages: messages || [] });
         } catch (error) {
-            console.error('Error al obtener historial global:', error);
+            console.error('[Error] request_global_history:', error.message);
+            socket.emit('chat_history', { contactId: 'global', messages: [] });
         }
     });
 
     socket.on('find_user_by_number', async (number) => {
-        const cleanNumber = String(number).trim();
-        console.log(`Buscando usuario con número: ${cleanNumber}`);
+        try {
+            const cleanNumber = String(number || '').trim();
+            if (!cleanNumber) {
+                socket.emit('user_found', null);
+                return;
+            }
 
-        if (!cleanNumber) {
-            socket.emit('user_found', null);
-            return;
-        }
-
-        const user = await firebaseDb.get('SELECT * FROM users WHERE phone_number = ?', [cleanNumber]);
-
-        if (user) {
-            console.log(`Usuario encontrado: ${user.username}`);
-            socket.emit('user_found', user);
-        } else {
-            console.log(`Usuario con número ${cleanNumber} no encontrado.`);
+            console.log(`[Search] Buscando número: ${cleanNumber}`);
+            const user = await firebaseDb.get('SELECT * FROM users WHERE phone_number = ?', [cleanNumber]);
+            socket.emit('user_found', user || null);
+            console.log(`[Search] Resultado: ${user ? user.username : 'no encontrado'}`);
+        } catch (error) {
+            console.error('[Error] find_user_by_number:', error.message);
             socket.emit('user_found', null);
         }
     });
-
 
     socket.on('send_message', async (data) => {
-        const { id, sender_id, receiver_id, content, type, file_info } = data;
+        try {
+            const { id, sender_id, receiver_id, content, type, file_info } = data;
+            if (!id || !sender_id || !receiver_id) return;
 
-        // Obtener info del remitente para que el receptor pueda identificarlo si no lo tiene en contactos
-        const sender = await firebaseDb.get('SELECT username, profile_pic, phone_number FROM users WHERE id = ?', [sender_id]);
+            const sender = await firebaseDb.get('SELECT username, profile_pic, phone_number FROM users WHERE id = ?', [sender_id]);
 
-        const messageToForward = {
-            ...data,
-            sender_name: sender?.username || 'Usuario',
-            sender_pic: sender?.profile_pic,
-            sender_phone: sender?.phone_number
-        };
+            const messageToForward = {
+                ...data,
+                sender_name: sender?.username || 'Usuario',
+                sender_pic: sender?.profile_pic || '',
+                sender_phone: sender?.phone_number || ''
+            };
 
-        await firebaseDb.run(
-            'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, sender_id, receiver_id, content, type, file_info?.path, file_info?.name, file_info?.size]
-        );
+            await firebaseDb.run(
+                'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, sender_id, receiver_id, content || '', type || 'text', file_info?.path || null, file_info?.name || null, file_info?.size || null]
+            );
 
-        if (receiver_id === 'global') {
-            socket.broadcast.emit('receive_message', messageToForward);
-        } else {
-            io.to(receiver_id).emit('receive_message', messageToForward);
+            if (receiver_id === 'global') {
+                socket.broadcast.emit('receive_message', messageToForward);
+            } else {
+                io.to(receiver_id).emit('receive_message', messageToForward);
+            }
+            socket.emit('message_sent', { id });
+        } catch (error) {
+            console.error('[Error] send_message:', error.message);
         }
-        socket.emit('message_sent', { id });
     });
 
+    // ==========================================
+    // ESTADOS (Historias)
+    // ==========================================
 
     socket.on('publish_status', async (data) => {
-        const { id, user_id, content, type } = data;
+        try {
+            const { id, user_id, content, type } = data;
+            if (!id || !user_id) return;
 
-        await firebaseDb.run(
-            'INSERT INTO statuses (id, user_id, content, type) VALUES (?, ?, ?, ?)',
-            [id, user_id, content, type]
-        );
+            await firebaseDb.run(
+                'INSERT INTO statuses (id, user_id, content, type) VALUES (?, ?, ?, ?)',
+                [id, user_id, content, type]
+            );
 
-        console.log(`Estado publicado por: ${user_id}`);
-
-        // Obtener todos los estados válidos (últimas 24h)
-        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
-
-        io.emit('status_list', statuses);
+            console.log(`[Status] Publicado por: ${user_id}`);
+            const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
+            io.emit('status_list', statuses || []);
+        } catch (error) {
+            console.error('[Error] publish_status:', error.message);
+        }
     });
 
     socket.on('request_statuses', async () => {
-        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
-        socket.emit('status_list', statuses);
+        try {
+            const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
+            socket.emit('status_list', statuses || []);
+        } catch (error) {
+            console.error('[Error] request_statuses:', error.message);
+            socket.emit('status_list', []);
+        }
     });
 
     socket.on('delete_status', async (statusId) => {
-        await firebaseDb.run('DELETE FROM statuses WHERE id = ?', [statusId]);
-        const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
-        io.emit('status_list', statuses);
+        try {
+            if (!statusId) return;
+            await firebaseDb.run('DELETE FROM statuses WHERE id = ?', [statusId]);
+            const statuses = await firebaseDb.all('SELECT statuses.*, users.username, users.profile_pic FROM statuses');
+            io.emit('status_list', statuses || []);
+        } catch (error) {
+            console.error('[Error] delete_status:', error.message);
+        }
     });
 
+    // ==========================================
+    // DESCONEXIÓN
+    // ==========================================
     socket.on('disconnect', async () => {
         if (currentUserId) {
             onlineUsers.delete(currentUserId);
             io.emit('online_count', onlineUsers.size);
-            await broadcastAdminUserList(io, firebaseDb, onlineUsers);
+            await broadcastAdminUserList(io);
         }
-        console.log('Usuario desconectado');
+        console.log(`[Disconnect] ${currentUserId || 'desconocido'}`);
     });
 });
 
-// Ruta de captura general para el frontend (SPA)
+// --- SPA CATCH-ALL ---
 app.use((req, res, next) => {
     if (req.url.startsWith('/api') || req.url.startsWith('/uploads') || req.url.startsWith('/socket.io')) {
         return next();
     }
     const indexPath = path.resolve(__dirname, '..', 'dist', 'index.html');
-    res.sendFile(indexPath);
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.status(404).send('Build no disponible. Ejecuta npm run build.');
+    }
 });
 
+// --- INICIO DEL SERVIDOR ---
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
     console.log(`Servidor Konek Fun corriendo en el puerto ${PORT} con FIREBASE`);
 });
