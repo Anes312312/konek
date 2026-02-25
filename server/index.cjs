@@ -106,17 +106,22 @@ const tempDeletedIds = new Set(); // Evita que usuarios recién borrados se re-c
 async function broadcastAdminUserList(io, db, onlineUsers) {
     if (!db) return;
     try {
+        console.log('[Debug] Ejecutando broadcastAdminUserList...');
         const allUsers = await db.all(`
             SELECT id, username, profile_pic, status, phone_number, role 
             FROM users 
             WHERE id NOT IN (SELECT id FROM deleted_ids)
         `);
+        console.log(`[Debug] Usuarios encontrados en DB: ${allUsers.length}`);
+
         const usersWithStatus = allUsers.map(u => ({
             ...u,
             isOnline: onlineUsers.has(u.id)
         }));
 
         // Notificar a la sala de administradores
+        const adminRoomSize = io.sockets.adapter.rooms.get('admins_room')?.size || 0;
+        console.log(`[Debug] Enviando lista a 'admins_room' (Admins conectados: ${adminRoomSize})`);
         io.to('admins_room').emit('admin_user_list', usersWithStatus);
 
         // Notificar a todos los usuarios para actualizar sus listas de contactos
@@ -196,8 +201,8 @@ io.on('connection', (socket) => {
 
             // Si es un admin, unirlo a la sala especial para recibir actualizaciones masivas
             if (userData.role === 'admin') {
-                socket.join('admins_room');
-                console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username}`);
+                await socket.join('admins_room');
+                console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username} (ID: ${userId})`);
 
                 // LIMPIEZA DE DUPLICADOS: Solo puede haber un admin con el nombre 'Admin'
                 await db.run(
@@ -215,6 +220,7 @@ io.on('connection', (socket) => {
                     ...u,
                     isOnline: onlineUsers.has(u.id)
                 }));
+                console.log(`[Debug] Enviando lista inicial directamente al admin ${userId} (${usersWithStatus.length} usuarios)`);
                 socket.emit('admin_user_list', usersWithStatus);
             }
 
