@@ -122,9 +122,11 @@ io.on('connection', (socket) => {
 
         // Guardar o actualizar usuario en DB
         try {
-            // Verificar si el ID está en la lista negra temporal de borrados
-            if (tempDeletedIds.has(userId)) {
-                socket.emit('error', { message: 'Esta sesión ha sido terminada.' });
+            // Verificar si el ID está en la lista negra temporal o permanente de borrados
+            const isBannedForever = await db.get('SELECT id FROM deleted_ids WHERE id = ?', [userId]);
+            if (tempDeletedIds.has(userId) || isBannedForever) {
+                console.log(`Intento de conexión rechazado (ID eliminado): ${userId}`);
+                socket.emit('error', { message: 'Esta cuenta ha sido desactivada por el administrador.' });
                 socket.emit('user_deleted');
                 socket.disconnect(true);
                 return;
@@ -227,6 +229,9 @@ io.on('connection', (socket) => {
         await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
         await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
 
+        // Registrar el ID como eliminado permanentemente para evitar que se re-cree
+        await db.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [targetId]);
+
         // Añadir a lista negra temporal para evitar re-creación inmediata por sockets persistentes
         tempDeletedIds.add(targetId);
         setTimeout(() => tempDeletedIds.delete(targetId), 60000); // 1 minuto de bloqueo
@@ -237,6 +242,7 @@ io.on('connection', (socket) => {
         // Desconexión inmediata de sockets asociados a ese ID
         const sockets = await io.in(targetId).fetchSockets();
         sockets.forEach(s => s.disconnect(true));
+        onlineUsers.delete(targetId);
 
         const users = await db.all('SELECT * FROM users');
         io.emit('user_list', users);

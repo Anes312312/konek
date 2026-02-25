@@ -55,6 +55,11 @@ async function setupDatabase() {
             type TEXT, -- 'image', 'text'
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS deleted_ids (
+            id TEXT PRIMARY KEY,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
 
     // Asegurar que las columnas nuevas existan si la DB ya estaba creada
