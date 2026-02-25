@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 // Eliminamos la librería que daba problemas y usamos un set de emojis estándar y seguro
@@ -14,8 +14,8 @@ const STATUS_FONTS = ['Inter', 'serif', 'cursive', 'monospace', 'Outfit'];
 import './index.css';
 
 
-// Configuración del servidor dinámica (detecta si es local o producción)
-const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+// Configuración del servidor dinámica
+const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.'))
   ? `http://${window.location.hostname}:5000`
   : window.location.origin;
 
@@ -86,6 +86,13 @@ function App() {
   });
 
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [isLinking, setIsLinking] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    const setupDone = localStorage.getItem('konek_setup_done');
+    const isActuallyNew = !setupDone || setupDone !== 'true';
+    console.log('[Konek] Onboarding status:', { setupDone, isActuallyNew });
+    return isActuallyNew;
+  });
   const activeChatRef = useRef(null);
 
   useEffect(() => {
@@ -205,6 +212,19 @@ function App() {
           return updatedUser ? updatedUser : contact;
         });
       });
+
+      // ¡NUEVO! Sincronizar mi propio perfil si el admin lo cambió desde el panel
+      const me = users.find(u => u.id === userId);
+      if (me) {
+        setProfile(prev => ({
+          ...prev,
+          name: me.username || prev.name,
+          number: me.phone_number || prev.number,
+          role: me.role || prev.role,
+          photo: me.profile_pic || prev.photo,
+          description: me.status || prev.description
+        }));
+      }
     });
 
     socketRef.current.on('status_list', (statusList) => {
@@ -213,6 +233,11 @@ function App() {
 
     socketRef.current.on('login_success', (userData) => {
       setProfile(prev => ({ ...prev, role: userData.role, number: userData.phone_number || '' }));
+      // Si el servidor dice que ya tiene nombre, quizás ya no necesita onboarding
+      if (userData.username && userData.username !== 'Mi Usuario') {
+        localStorage.setItem('konek_setup_done', 'true');
+        setShowOnboarding(false);
+      }
     });
 
     socketRef.current.emit('request_statuses');
@@ -449,6 +474,16 @@ function App() {
     setShowProfileModal(false);
   };
 
+  const completeOnboarding = () => {
+    if (!profile.name.trim() || profile.name === 'Mi Usuario') {
+      alert("Por favor, introduce un nombre real para continuar.");
+      return;
+    }
+    localStorage.setItem('konek_setup_done', 'true');
+    setShowOnboarding(false);
+    socketRef.current.emit('update_profile', { userId, profile });
+  };
+
   const deleteChat = (userIdToDelete) => {
     if (window.confirm('¿Estás seguro de que deseas borrar este chat? Se eliminará la lista de mensajes localmente.')) {
       // Eliminar de los contactos disponibles
@@ -534,6 +569,47 @@ function App() {
     if (!searchNumber.trim()) return;
     socketRef.current.emit('find_user_by_number', searchNumber);
   };
+
+  const handleLinkNumber = () => {
+    const num = prompt("Introduce el número de identificación proporcionado por el Admin:");
+    if (num) {
+      setIsLinking(true);
+      socketRef.current.emit('find_user_by_number', num);
+    }
+  };
+
+  // Escuchar cuando se encuentra un usuario para vincular
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    const handleUserFound = (user) => {
+      if (!isLinking) return; // Solo actuar si viene de handleLinkNumber
+
+      setIsLinking(false);
+      if (user) {
+        if (user.id === userId) {
+          alert('Este número ya está vinculado a tu sesión actual.');
+          return;
+        }
+        if (window.confirm(`¿Vincular a la cuenta de "${user.username}" con número ${user.phone_number}? (Se reiniciará la aplicación)`)) {
+          localStorage.setItem('konek_userId', user.id);
+          localStorage.setItem('konek_profile', JSON.stringify({
+            name: user.username,
+            photo: user.profile_pic,
+            description: user.status,
+            number: user.phone_number,
+            role: user.role
+          }));
+          window.location.reload();
+        }
+      } else {
+        alert('No se encontró ningún usuario con ese número de identificación.');
+      }
+    };
+
+    socketRef.current.on('user_found', handleUserFound);
+    return () => socketRef.current.off('user_found', handleUserFound);
+  }, [userId, isLinking]);
 
   return (
     <div className="app-container">
@@ -961,6 +1037,52 @@ function App() {
         )}
       </div>
 
+      {/* --- SECCIÓN DE MODALES (Al final para asegurar visibilidad) --- */}
+
+      {/* Modal de Bienvenida (Onboarding) */}
+      {showOnboarding && (
+        <div className="onboarding-overlay">
+          <div className="onboarding-card">
+            <div className="onboarding-header">
+              <div className="onboarding-logo">
+                <MessageCircle size={48} color="white" />
+              </div>
+              <h2>Bienvenido a Konek Fun</h2>
+              <p>Configura tu perfil para empezar a chatear</p>
+            </div>
+
+            <div className="onboarding-body">
+              <div className="profile-photo-edit large" onClick={() => profilePhotoInputRef.current.click()}>
+                {profile.photo ? <img src={profile.photo} /> : <div className="placeholder"><Camera size={50} /></div>}
+                <div className="overlay"><Camera size={24} /> AÑADIR FOTO</div>
+              </div>
+
+              <div className="input-group">
+                <label>¿Cómo te llamas?</label>
+                <input
+                  type="text"
+                  placeholder="Tu nombre o apodo"
+                  value={profile.name === 'Mi Usuario' ? '' : profile.name}
+                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                />
+              </div>
+
+              <div className="info-box">
+                <ShieldCheck size={20} color="var(--wa-accent)" />
+                <div>
+                  <strong>Identificación oficial</strong>
+                  <p>Una vez dentro, el administrador te asignará un número de ID único para validar tu cuenta.</p>
+                </div>
+              </div>
+
+              <button className="onboarding-submit" onClick={completeOnboarding}>
+                Empezar a usar Konek Fun
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Perfil */}
       {showProfileModal && (
         <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
@@ -987,10 +1109,47 @@ function App() {
 
               <div className="input-group">
                 <label>Tu número de identificación</label>
-                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', color: 'var(--wa-text-secondary)', fontSize: '14px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  {profile.number || 'Pendiente de asignar por Admin'}
+                <div
+                  className={`id-number-display ${profile.number ? 'active' : 'pending'}`}
+                  style={{
+                    padding: '12px',
+                    background: profile.number ? 'rgba(0, 168, 132, 0.1)' : 'rgba(255,255,255,0.05)',
+                    borderRadius: '8px',
+                    color: profile.number ? 'var(--wa-accent)' : 'var(--wa-text-secondary)',
+                    fontSize: '15px',
+                    border: profile.number ? '1px solid var(--wa-accent)' : '1px solid rgba(255,255,255,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontWeight: profile.number ? '600' : '400'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {profile.number ? <ShieldCheck size={18} /> : <CircleDot size={18} className="pulse" />}
+                    {profile.number || 'Pendiente de asignar'}
+                  </div>
+                  {!profile.number && (
+                    <button
+                      onClick={handleLinkNumber}
+                      style={{
+                        background: 'var(--wa-accent)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: 'white',
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Vincular
+                    </button>
+                  )}
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--wa-accent)', marginTop: 8 }}>Este número es asignado por el administrador y no se puede cambiar.</p>
+                <p style={{ fontSize: 11, color: 'var(--wa-text-secondary)', marginTop: 8 }}>
+                  {profile.number
+                    ? 'Este ID es único y verifica tu identidad en Konek Fun.'
+                    : 'Solicita tu número al administrador para activar todas las funciones.'}
+                </p>
               </div>
 
               <div className="input-group">
