@@ -152,14 +152,17 @@ io.on('connection', (socket) => {
     let currentUserId = null;
 
     socket.on('join', async (data) => {
+        let step = 'inicio';
         try {
             const { userId, profile } = data;
+            step = 'parsing datos';
 
             // Asegurar que el número vacío se guarde como null para evitar conflictos de UNIQUE
-            const phoneNumber = profile.number && profile.number.trim() !== '' ? profile.number.trim() : null;
+            const phoneNumber = (profile.number && String(profile.number).trim() !== '') ? String(profile.number).trim() : null;
 
             // Verificar si el número ya está siendo usado por otro ID
             if (phoneNumber) {
+                step = 'verificar número duplicado';
                 const existingUser = await firebaseDb.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
                 if (existingUser) {
                     socket.emit('error', { message: 'Este número ya está en uso por otro usuario.' });
@@ -171,7 +174,6 @@ io.on('connection', (socket) => {
             socket.join(userId);
             onlineUsers.add(userId);
 
-            // Guardar o actualizar usuario en DB
             // BLOQUEO ESTRICTO: Rechazar nombres o números baneados
             if (BANNED_NAMES.includes(profile.name) || BANNED_NUMBERS.includes(phoneNumber)) {
                 console.log(`[Bloqueo] Intento de conexión con datos baneados: ${profile.name} / ${phoneNumber}`);
@@ -181,7 +183,14 @@ io.on('connection', (socket) => {
             }
 
             // Verificar si el ID está en la lista negra temporal o permanente de borrados
-            const isBannedForever = await firebaseDb.get('SELECT id FROM deleted_ids WHERE id = ?', [userId]);
+            step = 'verificar deleted_ids';
+            let isBannedForever = null;
+            try {
+                isBannedForever = await firebaseDb.get('SELECT id FROM deleted_ids WHERE id = ?', [userId]);
+            } catch (e) {
+                console.warn('[Warn] Error al verificar deleted_ids, ignorando:', e.message);
+            }
+
             if (tempDeletedIds.has(userId) || isBannedForever) {
                 console.log(`Intento de conexión rechazado (ID eliminado): ${userId}`);
                 socket.emit('error', { message: 'Esta cuenta ha sido desactivada por el administrador.' });
@@ -190,35 +199,40 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            step = 'buscar usuario existente';
             const existing = await firebaseDb.get('SELECT role, phone_number FROM users WHERE id = ?', [userId]);
-            let role = existing ? existing.role : 'user';
+            let role = existing ? (existing.role || 'user') : 'user';
 
-            let finalPhoneNumber = existing?.phone_number || phoneNumber;
+            let finalPhoneNumber = existing?.phone_number || phoneNumber || '';
 
             // SISTEMA DE ROL AUTOMÁTICO PARA EL PANEL:
             if (profile.name === 'Admin') {
                 role = 'admin';
-            } else if (!existing && profile.name.toLowerCase() === 'admin') {
+            } else if (!existing && typeof profile.name === 'string' && profile.name.toLowerCase() === 'admin') {
                 role = 'user';
             }
 
+            step = 'insertar/actualizar usuario';
             await firebaseDb.run(
                 'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status, role=excluded.role, phone_number=COALESCE(users.phone_number, excluded.phone_number)',
-                [userId, profile.name, profile.photo, profile.description, finalPhoneNumber, role]
+                [userId, profile.name || 'Usuario', profile.photo || '', profile.description || '', finalPhoneNumber, role]
             );
 
+            step = 'obtener datos de usuario';
             const userData = await firebaseDb.get('SELECT * FROM users WHERE id = ?', [userId]);
             console.log(`[Seguridad] Verificando rol de ${profile.name}: ${userData?.role}`);
 
-            socket.emit('login_success', userData);
+            socket.emit('login_success', userData || { id: userId, username: profile.name, role: role });
 
             // Si es un admin, unirlo a la sala especial para recibir actualizaciones masivas
-            if (userData && (userData.role === 'admin' || profile.name === 'Admin')) {
-                await socket.join('admins_room');
+            if ((userData && userData.role === 'admin') || profile.name === 'Admin') {
+                step = 'configurar admin';
+                socket.join('admins_room');
                 console.log(`[Seguridad] Admin detectado y suscrito: ${userData?.username || profile.name} (ID: ${userId})`);
 
+                step = 'obtener lista de usuarios para admin';
                 const allUsers = await firebaseDb.all(`SELECT * FROM users`);
-                const usersWithStatus = allUsers.map(u => ({
+                const usersWithStatus = (allUsers || []).map(u => ({
                     ...u,
                     role: u.role || 'user',
                     isOnline: onlineUsers.has(u.id)
@@ -229,13 +243,15 @@ io.on('connection', (socket) => {
 
             console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
 
+            step = 'broadcast';
             await broadcastAdminUserList(io, db, onlineUsers);
             io.emit('online_count', onlineUsers.size);
         } catch (error) {
-            console.error('[Error Crítico] Error en socket.on(join):', error);
-            socket.emit('error', { message: 'Error interno al unirse a la sesión.' });
+            console.error(`[Error Crítico] Error en socket.on(join) paso="${step}":`, error);
+            socket.emit('error', { message: `Error al unirse (${step}): ${error.message}` });
         }
     });
+
 
     socket.on('update_profile', async (data) => {
         try {
