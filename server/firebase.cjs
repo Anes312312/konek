@@ -4,10 +4,11 @@ const admin = require('firebase-admin');
 // inicializamos con Default Credentials o variables de entorno. 
 // Para que esto funcione en Render, el usuario deberá pegar el JSON de la cuenta de servicio en una variable de entorno.
 
+let db = null;
+
 if (!admin.apps.length) {
     try {
         console.log('[Firebase] Inicializando Admin SDK...');
-        // Opción A: Usar una variable de entorno con el JSON de la Service Account (Recomendado para Render)
         if (process.env.FIREBASE_SERVICE_ACCOUNT) {
             console.log('[Firebase] Usando FIREBASE_SERVICE_ACCOUNT de variables de entorno.');
             const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -15,23 +16,27 @@ if (!admin.apps.length) {
                 credential: admin.credential.cert(serviceAccount)
             });
         } else {
-            // Opción B: Intentar inicialización por ID de proyecto (Requiere ADC o entorno Google)
-            console.log('[Firebase] Intentando inicialización con Project ID:', process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312');
+            console.log('[Firebase] Intentando inicialización básica con Project ID:', process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312');
             admin.initializeApp({
                 projectId: process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312'
             });
         }
-        console.log('[Firebase] Admin SDK inicializado correctamente.');
+        db = admin.firestore();
+        console.log('[Firebase] Admin SDK y Firestore listos.');
     } catch (error) {
-        console.error('[Firebase Error] Fallo crítico al inicializar Firebase Admin:', error);
+        console.error('[Firebase Error] Fallo crítico al inicializar Firebase Admin:', error.message);
     }
+} else {
+    db = admin.firestore();
 }
-
-const db = admin.firestore();
 
 // Funciones para emular el comportamiento que tenía con SQLite pero sobre Firestore
 const firebaseDb = {
     all: async (query, params = []) => {
+        if (!db) {
+            console.error('[Firebase] Error: Intento de consulta sin DB inicializada.');
+            return [];
+        }
         // Esta es una implementación simplificada para mantener compatibilidad con el resto del código
         // Firestore no usa SQL, así que mapeamos las consultas más usadas
         if (query.includes('FROM users')) {
@@ -73,6 +78,7 @@ const firebaseDb = {
     },
 
     get: async (query, params = []) => {
+        if (!db) return null;
         if (query.includes('FROM users WHERE id = ?') || query.includes('FROM users WHERE phone_number = ?')) {
             const val = params[0];
             const field = query.includes('id = ?') ? admin.firestore.FieldPath.documentId() : 'phone_number';
@@ -90,6 +96,7 @@ const firebaseDb = {
     },
 
     run: async (query, params = []) => {
+        if (!db) return;
         // Mapeo de operaciones de escritura frecuentes
         if (query.includes('INSERT INTO users') || query.includes('ON CONFLICT(id) DO UPDATE')) {
             const [id, username, profile_pic, status, phone_number, role] = params;
@@ -137,6 +144,7 @@ const firebaseDb = {
 
     // Función especial para limpiezas masivas
     cleanBanned: async () => {
+        if (!db) return;
         const BANNED_NAMES = ['pelotudo', 'Anes'];
         const BANNED_NUMBERS = ['12345', '312'];
 
