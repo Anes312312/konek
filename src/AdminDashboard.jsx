@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Camera } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot } from 'lucide-react';
 
 const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? `${window.location.protocol}//${window.location.hostname}:5000`
@@ -11,20 +10,38 @@ function AdminDashboard() {
     const [adminUsers, setAdminUsers] = useState([]);
     const [onlineCount, setOnlineCount] = useState(0);
     const [adminEditingUser, setAdminEditingUser] = useState(null);
+    const [isConnected, setIsConnected] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
     const socketRef = useRef();
 
-    // Generar o recuperar ID de Admin (puedes hacerlo más formal luego)
-    // Usamos el mismo ID que el chat principal para evitar duplicados
-    const [adminId] = useState(() => localStorage.getItem('konek_userId') || 'admin_temp_' + Math.random().toString(36).substr(2, 9));
+    // Usar el mismo ID del usuario principal del chat
+    const [adminId] = useState(() => {
+        const existing = localStorage.getItem('konek_userId');
+        if (existing) return existing;
+        // Si no hay ID, crear uno nuevo para admin
+        const newId = 'admin_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('konek_userId', newId);
+        return newId;
+    });
 
     useEffect(() => {
-        localStorage.setItem('konek_admin_id', adminId);
         socketRef.current = io(SERVER_URL);
+
+        socketRef.current.on('connect', () => {
+            console.log('[Admin] Socket conectado');
+            setIsConnected(true);
+        });
+
+        socketRef.current.on('disconnect', () => {
+            console.log('[Admin] Socket desconectado');
+            setIsConnected(false);
+        });
 
         // --- LISTENERS ---
         socketRef.current.on('admin_user_list', (users) => {
-            console.log('Lista de usuarios recibida (Admin):', users.length);
+            console.log('[Admin] Lista recibida:', users.length, 'usuarios');
             setAdminUsers(users);
+            setErrorMsg('');
         });
 
         socketRef.current.on('online_count', (count) => {
@@ -32,21 +49,48 @@ function AdminDashboard() {
         });
 
         socketRef.current.on('login_success', (userData) => {
-            console.log('Admin logueado exitosamente:', userData);
-            // Pedir lista inicial una vez que sabemos que el servidor nos reconoce como admin
+            console.log('[Admin] Login exitoso:', userData.username, 'rol:', userData.role);
+            if (userData.role !== 'admin') {
+                setErrorMsg('Tu cuenta no tiene permisos de administrador.');
+                return;
+            }
+            // Pedir lista de usuarios tras login exitoso
             socketRef.current.emit('admin_get_all_users', adminId);
         });
 
-        socketRef.current.on('error', (err) => {
-            console.error('Error de socket (Admin):', err);
-            alert('Error: ' + err.message);
+        socketRef.current.on('user_list', (users) => {
+            // También escuchar user_list como fallback
+            console.log('[Admin] user_list recibida:', users.length);
+            if (adminUsers.length === 0) {
+                setAdminUsers(users);
+            }
         });
 
-        // --- EMITS ---
-        // Unirse como admin (el servidor debe validar esto, por ahora es nominal)
+        socketRef.current.on('error', (err) => {
+            console.error('[Admin] Error:', err);
+            setErrorMsg(err.message || 'Error desconocido');
+        });
+
+        // --- Unirse como Admin ---
+        // Obtener el perfil guardado para no sobrescribir datos existentes
+        let savedProfile = { name: 'Admin', photo: '', description: 'Dashboard Administrativo' };
+        try {
+            const stored = localStorage.getItem('konek_profile');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                // Mantener el nombre como Admin para asegurar el rol
+                savedProfile = {
+                    name: 'Admin',
+                    photo: parsed.photo || '',
+                    description: parsed.description || 'Dashboard Administrativo',
+                    number: parsed.number || ''
+                };
+            }
+        } catch (e) { /* ignore */ }
+
         socketRef.current.emit('join', {
             userId: adminId,
-            profile: { name: 'Admin', photo: '', description: 'Dashboard Administrativo' }
+            profile: savedProfile
         });
 
         return () => socketRef.current.disconnect();
@@ -54,6 +98,7 @@ function AdminDashboard() {
 
     const refreshUserList = () => {
         if (socketRef.current) {
+            console.log('[Admin] Solicitando lista manualmente...');
             socketRef.current.emit('admin_get_all_users', adminId);
         }
     };
@@ -74,6 +119,10 @@ function AdminDashboard() {
     };
 
     const adminDeleteUser = (targetId) => {
+        if (targetId === adminId) {
+            alert('No puedes eliminar tu propia cuenta de administrador.');
+            return;
+        }
         if (window.confirm('¿ELIMINAR este usuario y todos sus datos permanentemente?')) {
             socketRef.current.emit('admin_delete_user', { adminId, userId: targetId });
         }
@@ -92,7 +141,11 @@ function AdminDashboard() {
                     <span>Konek Fun Admin</span>
                 </div>
                 <div style={{ flex: 1 }}>
-                    {/* Espacio para futuros enlaces de navegación */}
+                    <div style={{ padding: '10px 16px', fontSize: 11, color: '#8696a0' }}>
+                        ID: {adminId.substring(0, 12)}...
+                        <br />
+                        Estado: {isConnected ? '🟢 Conectado' : '🔴 Desconectado'}
+                    </div>
                 </div>
                 <button className="admin-logout" onClick={() => window.location.href = '/'}>
                     <LogOut size={20} /> Volver al Chat
@@ -113,6 +166,20 @@ function AdminDashboard() {
                         </div>
                     </header>
 
+                    {errorMsg && (
+                        <div style={{
+                            padding: '12px 20px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '8px',
+                            color: '#ef4444',
+                            margin: '0 0 20px 0',
+                            fontSize: '14px'
+                        }}>
+                            ⚠️ {errorMsg}
+                        </div>
+                    )}
+
                     <div className="admin-metrics-grid">
                         <div className="metric-card">
                             <span className="label">Total Usuarios</span>
@@ -124,12 +191,16 @@ function AdminDashboard() {
                         </div>
                         <div className="metric-card">
                             <span className="label">Estado del Sistema</span>
-                            <span className="value" style={{ fontSize: '18px', color: '#00a884' }}>Operacional</span>
+                            <span className="value" style={{ fontSize: '18px', color: isConnected ? '#00a884' : '#ef4444' }}>
+                                {isConnected ? 'Operacional' : 'Sin conexión'}
+                            </span>
                         </div>
                     </div>
 
                     <div className="admin-table-container">
-                        <h3 style={{ padding: '20px', margin: 0, fontSize: '16px', color: '#8696a0' }}>Gestión de Usuarios</h3>
+                        <h3 style={{ padding: '20px', margin: 0, fontSize: '16px', color: '#8696a0' }}>
+                            Gestión de Usuarios ({adminUsers.length})
+                        </h3>
                         <table className="admin-table">
                             <thead>
                                 <tr>
@@ -144,7 +215,9 @@ function AdminDashboard() {
                                 {adminUsers.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#8696a0' }}>
-                                            No se encontraron usuarios registrados o el panel está cargando...
+                                            {isConnected
+                                                ? 'No se encontraron usuarios registrados. Haz clic en "Actualizar Lista" para reintentar.'
+                                                : 'Conectando al servidor...'}
                                         </td>
                                     </tr>
                                 ) : (
@@ -174,9 +247,11 @@ function AdminDashboard() {
                                                     <button className="edit-btn" title="Editar" onClick={() => setAdminEditingUser(u)}>
                                                         <Settings size={18} />
                                                     </button>
-                                                    <button className="delete-btn" title="Eliminar" onClick={() => adminDeleteUser(u.id)}>
-                                                        <Trash2 size={18} />
-                                                    </button>
+                                                    {u.id !== adminId && (
+                                                        <button className="delete-btn" title="Eliminar" onClick={() => adminDeleteUser(u.id)}>
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

@@ -200,15 +200,23 @@ io.on('connection', (socket) => {
             let role = existing ? (existing.role || 'user') : 'user';
             let finalPhoneNumber = existing?.phone_number || phoneNumber || '';
 
-            // Asignación automática de rol Admin
+            // Asignación de rol Admin - SOLO si no existe otro admin
             if (profile.name === 'Admin') {
-                role = 'admin';
-            } else if (!existing && typeof profile.name === 'string' && profile.name.toLowerCase() === 'admin') {
-                role = 'user'; // No permitir nuevos "admin" con nombre similar
+                step = 'verificar admin existente';
+                const existingAdmin = await firebaseDb.get("SELECT id FROM users WHERE role = 'admin'", []);
+                if (!existingAdmin || existingAdmin.id === userId) {
+                    // No hay admin, o este usuario YA es el admin → permitir
+                    role = 'admin';
+                    console.log(`[Admin] Rol admin asignado a ${userId}`);
+                } else {
+                    // Ya existe otro admin → este es usuario normal
+                    console.log(`[Admin] Ya existe admin ${existingAdmin.id}, ${userId} será 'user'`);
+                    role = 'user';
+                }
             }
 
             // Guardar/actualizar usuario
-            step = 'guardar usuario';
+            step = 'insertar/actualizar usuario';
             await firebaseDb.run(
                 'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET',
                 [userId, profile.name || 'Usuario', profile.photo || '', profile.description || '', finalPhoneNumber, role]
@@ -222,11 +230,18 @@ io.on('connection', (socket) => {
             console.log(`[Join] ${userResponse.username} (${userId}) rol=${userResponse.role}`);
             socket.emit('login_success', userResponse);
 
-            // Si es admin, suscribir a sala de admins
-            if (userResponse.role === 'admin' || profile.name === 'Admin') {
+            // Si es admin, suscribir a sala de admins y enviar lista
+            if (userResponse.role === 'admin') {
                 step = 'configurar admin';
                 socket.join('admins_room');
                 console.log(`[Admin] Suscrito: ${userResponse.username} (${userId})`);
+
+                // Limpiar admins duplicados (solo por seguridad)
+                step = 'limpiar admins duplicados';
+                await firebaseDb.run(
+                    "UPDATE users SET role = 'user' WHERE username = 'Admin' AND id != ?",
+                    [userId]
+                );
 
                 step = 'lista para admin';
                 const allUsers = await firebaseDb.all('SELECT * FROM users');
