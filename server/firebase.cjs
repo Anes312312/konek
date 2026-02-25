@@ -6,20 +6,24 @@ const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
     try {
-        // Opción A: Usar una variable de entorno con el JSON de la Service Account
+        console.log('[Firebase] Inicializando Admin SDK...');
+        // Opción A: Usar una variable de entorno con el JSON de la Service Account (Recomendado para Render)
         if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+            console.log('[Firebase] Usando FIREBASE_SERVICE_ACCOUNT de variables de entorno.');
             const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount)
             });
         } else {
-            // Opción B: Intentar inicialización por defecto (ADC)
+            // Opción B: Intentar inicialización por ID de proyecto (Requiere ADC o entorno Google)
+            console.log('[Firebase] Intentando inicialización con Project ID:', process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312');
             admin.initializeApp({
-                projectId: 'konek-fun-chat-312'
+                projectId: process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312'
             });
         }
+        console.log('[Firebase] Admin SDK inicializado correctamente.');
     } catch (error) {
-        console.error('Error inicializando Firebase Admin:', error);
+        console.error('[Firebase Error] Fallo crítico al inicializar Firebase Admin:', error);
     }
 }
 
