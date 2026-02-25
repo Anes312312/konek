@@ -30,7 +30,7 @@ const io = new Server(server, {
 // Confianza en el proxy para despliegues en la nube (Render/Vercel)
 app.set('trust proxy', 1);
 
-let db;
+const db = firebaseDb;
 
 // Configuración de Multer para recibir trozos (chunks)
 const storage = multer.memoryStorage();
@@ -480,13 +480,16 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 5000;
-// En Firebase no necesitamos setupDatabase local, pero mantenemos la estructura
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor Konek Fun corriendo en el puerto ${PORT} con FIREBASE`);
+// Ruta de captura general para el frontend (SPA)
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+        return next();
+    }
+    const indexPath = path.resolve(__dirname, '..', 'dist', 'index.html');
+    res.sendFile(indexPath);
 });
 
-// Ruta de captura general para el frontend (SPA)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor Konek Fun corriendo en el puerto ${PORT} con FIREBASE`);
 });
