@@ -204,9 +204,10 @@ io.on('connection', (socket) => {
                 await socket.join('admins_room');
                 console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username} (ID: ${userId})`);
 
-                // LIMPIEZA DE DUPLICADOS: Solo puede haber un admin con el nombre 'Admin'
+                // LIMPIEZA AGRESIVA DE DUPLICADOS: Solo puede haber un admin total
+                // Borramos cualquier otro usuario que se llame 'Admin' o tenga rol 'admin'
                 await db.run(
-                    "UPDATE users SET role = 'user' WHERE (username = 'Admin' OR role = 'admin') AND id != ?",
+                    "DELETE FROM users WHERE (username = 'Admin' OR role = 'admin') AND id != ?",
                     [userId]
                 );
 
@@ -301,8 +302,17 @@ io.on('connection', (socket) => {
         const admin = await db.get('SELECT role FROM users WHERE id = ?', [adminId]);
         if (admin?.role !== 'admin') return;
 
+        // Obtener info del usuario antes de borrarlo para banear su número si tiene
+        const targetUser = await db.get('SELECT phone_number, username FROM users WHERE id = ?', [targetId]);
+
         // Eliminar de la base de datos definitivamente
         await db.run('DELETE FROM users WHERE id = ?', [targetId]);
+
+        // Si tenía número, borrar CUALQUIER otro registro con ese número (limpieza total)
+        if (targetUser?.phone_number) {
+            await db.run('DELETE FROM users WHERE phone_number = ?', [targetUser.phone_number]);
+        }
+
         await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [targetId, targetId]);
         await db.run('DELETE FROM statuses WHERE user_id = ?', [targetId]);
 
@@ -322,7 +332,7 @@ io.on('connection', (socket) => {
         onlineUsers.delete(targetId);
 
         await broadcastAdminUserList(io, db, onlineUsers);
-        console.log(`[Seguridad] Usuario ${targetId} eliminado definitivamente por Admin ${adminId}`);
+        console.log(`[Seguridad] Usuario ${targetId} (${targetUser?.username}) eliminado definitivamente por Admin ${adminId}`);
     });
 
     socket.on('admin_create_user', async (data) => {
