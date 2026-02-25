@@ -5,7 +5,6 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs-extra');
 const multer = require('multer');
-const { setupDatabase } = require('./database.cjs');
 const { firebaseDb } = require('./firebase.cjs');
 const { v4: uuidv4 } = require('uuid');
 
@@ -472,20 +471,11 @@ io.on('connection', (socket) => {
 
 // Ruta de captura general para el frontend (SPA)
 app.use((req, res, next) => {
-    // Si es una ruta de API o archivos, dejar pasar
     if (req.url.startsWith('/api') || req.url.startsWith('/uploads') || req.url.startsWith('/socket.io')) {
         return next();
     }
-
     const indexPath = path.resolve(__dirname, '..', 'dist', 'index.html');
-
-    // Verificar si el archivo existe antes de enviarlo para evitar 500/503 por errores de FS
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        console.error(`[Error] index.html no encontrado en: ${indexPath}`);
-        res.status(404).send('La aplicación no ha sido compilada correctamente (falta dist/index.html)');
-    }
+    res.sendFile(indexPath);
 });
 
 const PORT = process.env.PORT || 5000;
