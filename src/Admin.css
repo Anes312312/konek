@@ -113,6 +113,29 @@
     align-items: center;
     gap: 8px;
     cursor: pointer;
+    transition: background 0.2s;
+}
+
+.admin-add-btn:hover {
+    background: #008f72;
+}
+
+.admin-refresh-btn {
+    background: #2a3942;
+    color: #e9edef;
+    border: 1px solid #3b4a54;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.admin-refresh-btn:hover {
+    background: #3b4a54;
 }
 
 .admin-table-container {

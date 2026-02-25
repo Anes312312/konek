@@ -102,6 +102,32 @@ app.get('/api/download/:fileId/:fileName', async (req, res) => {
 const onlineUsers = new Set();
 const tempDeletedIds = new Set(); // Evita que usuarios recién borrados se re-creen por re-conexiones automáticas
 
+// Función global para notificar a los admins y usuarios sobre cambios en el censo
+async function broadcastAdminUserList(io, db, onlineUsers) {
+    if (!db) return;
+    try {
+        const allUsers = await db.all(`
+            SELECT id, username, profile_pic, status, phone_number, role 
+            FROM users 
+            WHERE id NOT IN (SELECT id FROM deleted_ids)
+        `);
+        const usersWithStatus = allUsers.map(u => ({
+            ...u,
+            isOnline: onlineUsers.has(u.id)
+        }));
+
+        // Notificar a la sala de administradores
+        io.to('admins_room').emit('admin_user_list', usersWithStatus);
+
+        // Notificar a todos los usuarios para actualizar sus listas de contactos
+        io.emit('user_list', allUsers);
+
+        console.log(`[Sistema] Lista de usuarios sincronizada. Total: ${allUsers.length}`);
+    } catch (error) {
+        console.error('[Error] Error al difundir lista de usuarios:', error);
+    }
+}
+
 io.on('connection', (socket) => {
     let currentUserId = null;
 
@@ -138,7 +164,11 @@ io.on('connection', (socket) => {
 
             const existing = await db.get('SELECT role, phone_number FROM users WHERE id = ?', [userId]);
             let role = existing ? existing.role : 'user';
-            let finalPhoneNumber = existing?.phone_number;
+
+            // Si el usuario es nuevo, usamos el número que trae el perfil si existe
+            // Si ya existe, nos quedamos con el que tiene en la DB o actualizamos si el perfil trae uno nuevo
+            // pero priorizando la DB si ya está establecido.
+            let finalPhoneNumber = existing?.phone_number || phoneNumber;
 
             // Si el perfil no existe y no es el primer join (trae un nombre por defecto), 
             // no lo creamos si no tiene nombre real o si sospechamos que fue borrado
@@ -146,15 +176,18 @@ io.on('connection', (socket) => {
                 // Es un usuario nuevo legítimo o uno borrado
             }
 
-            // BLOQUEO DE AUTO-PROMOCIÓN: Ya no asignamos admin solo por llamarse 'admin'.
-            // El rol debe ser asignado manualmente por el administrador principal o estar en la DB.
-            if (!existing && profile.name.toLowerCase() === 'admin' && profile.username !== 'Admin') {
-                // Si es un usuario nuevo que intenta llamarse Admin, lo dejamos como user por seguridad.
+            // SISTEMA DE ROL AUTOMÁTICO PARA EL PANEL:
+            // Si el usuario trae el nombre exacto 'Admin' (mayúscula inicial) y es su primer ingreso
+            // o ya tiene el rol, le permitimos ser admin. 
+            if (profile.name === 'Admin') {
+                role = 'admin';
+            } else if (!existing && profile.name.toLowerCase() === 'admin') {
+                // Si intenta llamarse 'admin' en minúsculas siendo nuevo, lo dejamos como user por seguridad
                 role = 'user';
             }
 
             await db.run(
-                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status, role=excluded.role',
+                'INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, profile_pic=excluded.profile_pic, status=excluded.status, role=excluded.role, phone_number=COALESCE(users.phone_number, excluded.phone_number)',
                 [userId, profile.name, profile.photo, profile.description, finalPhoneNumber, role]
             );
 
@@ -166,12 +199,23 @@ io.on('connection', (socket) => {
                 socket.join('admins_room');
                 console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username}`);
 
-                // LIMPIEZA DE DUPLICADOS: Si este es el admin "oficial", degradamos cualquier otro admin duplicado
-                // que tenga un ID diferente pero el mismo nombre 'Admin' o 'admin'
+                // LIMPIEZA DE DUPLICADOS: Solo puede haber un admin con el nombre 'Admin'
                 await db.run(
-                    "UPDATE users SET role = 'user' WHERE (username = 'Admin' OR username = 'admin' OR role = 'admin') AND id != ?",
+                    "UPDATE users SET role = 'user' WHERE (username = 'Admin' OR role = 'admin') AND id != ?",
                     [userId]
                 );
+
+                // Forzar envío inmediato de la lista al admin que acaba de entrar
+                const allUsers = await db.all(`
+                    SELECT id, username, profile_pic, status, phone_number, role 
+                    FROM users 
+                    WHERE id NOT IN (SELECT id FROM deleted_ids)
+                `);
+                const usersWithStatus = allUsers.map(u => ({
+                    ...u,
+                    isOnline: onlineUsers.has(u.id)
+                }));
+                socket.emit('admin_user_list', usersWithStatus);
             }
 
             console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
@@ -181,21 +225,10 @@ io.on('connection', (socket) => {
         }
 
         // Avisar a todos que hay un nuevo usuario/actualización
-        // Sincronizar lista de usuarios (Excluyendo los que están marcados como eliminados definitivamente)
-        const allUsers = await db.all(`
-            SELECT id, username, profile_pic, status, phone_number, role 
-            FROM users 
-            WHERE id NOT IN (SELECT id FROM deleted_ids)
-        `);
-        io.emit('user_list', allUsers);
+        // La función broadcastAdminUserList ya emite 'user_list' a todos
+        // Avisar a todos que hay un nuevo usuario/actualización
+        await broadcastAdminUserList(io, db, onlineUsers);
         io.emit('online_count', onlineUsers.size);
-
-        // Si el que se acaba de unir es admin, enviarle también la lista completa inmediatamente
-        const uCurrent = await db.get('SELECT role FROM users WHERE id = ?', [userId]);
-        if (uCurrent?.role === 'admin') {
-            const usersWithStatus = allUsers.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
-            socket.emit('admin_user_list', usersWithStatus);
-        }
     });
 
     socket.on('update_profile', async (data) => {
@@ -204,14 +237,14 @@ io.on('connection', (socket) => {
         try {
             const user = await db.get('SELECT role FROM users WHERE id = ?', [userId]);
 
-            // Solo actualizamos nombre, foto y descripción. El número es solo para el Admin
+            // Actualizamos nombre, foto y descripción. 
+            // También actualizamos el número si el usuario lo está configurando y no tenía uno
             await db.run(
-                'UPDATE users SET username = ?, profile_pic = ?, status = ? WHERE id = ?',
-                [profile.name, profile.photo, profile.description, userId]
+                'UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = COALESCE(phone_number, ?) WHERE id = ?',
+                [profile.name, profile.photo, profile.description, profile.number || null, userId]
             );
 
-            const allUsers = await db.all('SELECT id, username, profile_pic, status, phone_number, role FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
-            io.emit('user_list', allUsers);
+            await broadcastAdminUserList(io, db, onlineUsers);
         } catch (error) {
             socket.emit('error', { message: 'Error al actualizar perfil.' });
         }
@@ -220,6 +253,7 @@ io.on('connection', (socket) => {
     // --- ADMIN EVENTS ---
 
     socket.on('admin_get_all_users', async (adminId) => {
+        if (!db) return;
         const admin = await db.get('SELECT role FROM users WHERE id = ?', [adminId]);
         if (admin?.role !== 'admin') {
             console.log(`[Seguridad] Intento de acceso denegado a lista de usuarios por ID: ${adminId}`);
@@ -229,13 +263,17 @@ io.on('connection', (socket) => {
         // Limpieza preventiva: Eliminar de 'users' cualquier ID que esté en 'deleted_ids'
         await db.run('DELETE FROM users WHERE id IN (SELECT id FROM deleted_ids)');
 
-        const users = await db.all('SELECT * FROM users');
+        const users = await db.all(`
+            SELECT id, username, profile_pic, status, phone_number, role 
+            FROM users 
+            WHERE id NOT IN (SELECT id FROM deleted_ids)
+        `);
         const usersWithStatus = users.map(u => ({
             ...u,
             isOnline: onlineUsers.has(u.id)
         }));
         socket.emit('admin_user_list', usersWithStatus);
-        console.log(`[Admin] Lista completa de usuarios enviada a admin ${adminId}`);
+        console.log(`[Admin] Solicitud manual de lista recibida de admin ${adminId}. Enviando ${users.length} usuarios.`);
     });
 
     socket.on('admin_update_user', async (data) => {
@@ -249,12 +287,7 @@ io.on('connection', (socket) => {
             [username, phone_number, role, userId]
         );
 
-        const users = await db.all('SELECT * FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
-        io.emit('user_list', users); // Actualizar para todos
-
-        // Refrescar lista de admin
-        const usersWithStatus = users.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
-        socket.emit('admin_user_list', usersWithStatus);
+        await broadcastAdminUserList(io, db, onlineUsers);
     });
 
     socket.on('admin_delete_user', async (data) => {
@@ -282,12 +315,7 @@ io.on('connection', (socket) => {
         sockets.forEach(s => s.disconnect(true));
         onlineUsers.delete(targetId);
 
-        const users = await db.all('SELECT * FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
-        io.emit('user_list', users);
-
-        const usersWithStatus = users.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
-        // Sincronizar todos los paneles de administración abiertos
-        io.to('admins_room').emit('admin_user_list', usersWithStatus);
+        await broadcastAdminUserList(io, db, onlineUsers);
         console.log(`[Seguridad] Usuario ${targetId} eliminado definitivamente por Admin ${adminId}`);
     });
 
@@ -302,11 +330,7 @@ io.on('connection', (socket) => {
             [id || uuidv4(), username, phone_number, role || 'user']
         );
 
-        const users = await db.all('SELECT * FROM users');
-        io.emit('user_list', users);
-
-        const usersWithStatus = users.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));
-        socket.emit('admin_user_list', usersWithStatus);
+        await broadcastAdminUserList(io, db, onlineUsers);
     });
 
     socket.on('request_chat_history', async ({ userId, contactId }) => {
@@ -374,7 +398,7 @@ io.on('connection', (socket) => {
         };
 
         await db.run(
-            'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime("%Y-%m-%dT%H:%M:%fZ", "now"))',
             [id, sender_id, receiver_id, content, type, file_info?.path, file_info?.name, file_info?.size]
         );
 
@@ -391,7 +415,7 @@ io.on('connection', (socket) => {
         const { id, user_id, content, type } = data;
 
         await db.run(
-            'INSERT INTO statuses (id, user_id, content, type, timestamp) VALUES (?, ?, ?, ?, strftime("%Y-%m-%dT%H:%M:%SZ", "now"))',
+            'INSERT INTO statuses (id, user_id, content, type, timestamp) VALUES (?, ?, ?, ?, strftime("%Y-%m-%dT%H:%M:%fZ", "now"))',
             [id, user_id, content, type]
         );
 
@@ -438,10 +462,11 @@ io.on('connection', (socket) => {
         io.emit('status_list', statuses);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         if (currentUserId) {
             onlineUsers.delete(currentUserId);
             io.emit('online_count', onlineUsers.size);
+            await broadcastAdminUserList(io, db, onlineUsers);
         }
         console.log('Usuario desconectado');
     });

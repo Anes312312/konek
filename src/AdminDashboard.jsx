@@ -21,13 +21,9 @@ function AdminDashboard() {
         localStorage.setItem('konek_admin_id', adminId);
         socketRef.current = io(SERVER_URL);
 
-        // Unirse como admin (el servidor debe validar esto, por ahora es nominal)
-        socketRef.current.emit('join', {
-            userId: adminId,
-            profile: { name: 'Admin', photo: '', description: 'Dashboard Administrativo' }
-        });
-
+        // --- LISTENERS ---
         socketRef.current.on('admin_user_list', (users) => {
+            console.log('Lista de usuarios recibida (Admin):', users.length);
             setAdminUsers(users);
         });
 
@@ -35,11 +31,32 @@ function AdminDashboard() {
             setOnlineCount(count);
         });
 
-        // Pedir lista inicial
-        socketRef.current.emit('admin_get_all_users', adminId);
+        socketRef.current.on('login_success', (userData) => {
+            console.log('Admin logueado exitosamente:', userData);
+            // Pedir lista inicial una vez que sabemos que el servidor nos reconoce como admin
+            socketRef.current.emit('admin_get_all_users', adminId);
+        });
+
+        socketRef.current.on('error', (err) => {
+            console.error('Error de socket (Admin):', err);
+            alert('Error: ' + err.message);
+        });
+
+        // --- EMITS ---
+        // Unirse como admin (el servidor debe validar esto, por ahora es nominal)
+        socketRef.current.emit('join', {
+            userId: adminId,
+            profile: { name: 'Admin', photo: '', description: 'Dashboard Administrativo' }
+        });
 
         return () => socketRef.current.disconnect();
     }, [adminId]);
+
+    const refreshUserList = () => {
+        if (socketRef.current) {
+            socketRef.current.emit('admin_get_all_users', adminId);
+        }
+    };
 
     const adminCreateUser = () => {
         const name = prompt('Nombre del nuevo usuario:');
@@ -86,9 +103,14 @@ function AdminDashboard() {
                 <div className="admin-content-inner">
                     <header className="admin-main-header">
                         <h1>Panel de Administración</h1>
-                        <button className="admin-add-btn" onClick={adminCreateUser}>
-                            <UserPlus size={20} /> Crear Nuevo Usuario
-                        </button>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button className="admin-refresh-btn" onClick={refreshUserList}>
+                                <CircleDot size={20} /> Actualizar Lista
+                            </button>
+                            <button className="admin-add-btn" onClick={adminCreateUser}>
+                                <UserPlus size={20} /> Crear Nuevo Usuario
+                            </button>
+                        </div>
                     </header>
 
                     <div className="admin-metrics-grid">
@@ -119,35 +141,47 @@ function AdminDashboard() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {adminUsers.map(u => (
-                                    <tr key={u.id}>
-                                        <td>
-                                            <div className="table-user-info">
-                                                <div className="avatar-sm">
-                                                    {u.profile_pic ? <img src={u.profile_pic} /> : <User size={16} color="#8696a0" />}
-                                                </div>
-                                                <span>{u.username}</span>
-                                            </div>
-                                        </td>
-                                        <td><code className="id-badge">{u.phone_number || '---'}</code></td>
-                                        <td><span className={`role-badge ${u.role}`}>{u.role?.toUpperCase()}</span></td>
-                                        <td>
-                                            <span className={`status-pill ${u.isOnline ? 'online' : 'offline'}`}>
-                                                {u.isOnline ? 'Online' : 'Offline'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div className="action-btns">
-                                                <button className="edit-btn" onClick={() => setAdminEditingUser(u)}>
-                                                    <Settings size={18} />
-                                                </button>
-                                                <button className="delete-btn" onClick={() => adminDeleteUser(u.id)}>
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
+                                {adminUsers.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#8696a0' }}>
+                                            No se encontraron usuarios registrados o el panel está cargando...
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    adminUsers.map(u => (
+                                        <tr key={u.id}>
+                                            <td>
+                                                <div className="table-user-info">
+                                                    <div className="avatar-sm">
+                                                        {u.profile_pic && u.profile_pic.length > 0 ? (
+                                                            <img src={u.profile_pic} alt={u.username} />
+                                                        ) : (
+                                                            <User size={16} color="#8696a0" />
+                                                        )}
+                                                    </div>
+                                                    <span>{u.username}</span>
+                                                </div>
+                                            </td>
+                                            <td><code className="id-badge">{u.phone_number || '---'}</code></td>
+                                            <td><span className={`role-badge ${u.role}`}>{u.role?.toUpperCase()}</span></td>
+                                            <td>
+                                                <span className={`status-pill ${u.isOnline ? 'online' : 'offline'}`}>
+                                                    {u.isOnline ? 'Online' : 'Offline'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div className="action-btns">
+                                                    <button className="edit-btn" title="Editar" onClick={() => setAdminEditingUser(u)}>
+                                                        <Settings size={18} />
+                                                    </button>
+                                                    <button className="delete-btn" title="Eliminar" onClick={() => adminDeleteUser(u.id)}>
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>

@@ -37,7 +37,7 @@ async function setupDatabase() {
             file_path TEXT,
             file_name TEXT,
             file_size INTEGER,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
         CREATE TABLE IF NOT EXISTS uploads (
@@ -53,12 +53,12 @@ async function setupDatabase() {
             user_id TEXT,
             content TEXT,
             type TEXT, -- 'image', 'text'
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
         CREATE TABLE IF NOT EXISTS deleted_ids (
             id TEXT PRIMARY KEY,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
         -- Purga preventiva de usuarios eliminados
