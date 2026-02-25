@@ -153,26 +153,26 @@ io.on('connection', (socket) => {
     let currentUserId = null;
 
     socket.on('join', async (data) => {
-        const { userId, profile } = data;
-
-        // Asegurar que el número vacío se guarde como null para evitar conflictos de UNIQUE
-        const phoneNumber = profile.number && profile.number.trim() !== '' ? profile.number.trim() : null;
-
-        // Verificar si el número ya está siendo usado por otro ID
-        if (phoneNumber) {
-            const existingUser = await firebaseDb.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
-            if (existingUser) {
-                socket.emit('error', { message: 'Este número ya está en uso por otro usuario.' });
-                return;
-            }
-        }
-
-        currentUserId = userId;
-        socket.join(userId);
-        onlineUsers.add(userId);
-
-        // Guardar o actualizar usuario en DB
         try {
+            const { userId, profile } = data;
+
+            // Asegurar que el número vacío se guarde como null para evitar conflictos de UNIQUE
+            const phoneNumber = profile.number && profile.number.trim() !== '' ? profile.number.trim() : null;
+
+            // Verificar si el número ya está siendo usado por otro ID
+            if (phoneNumber) {
+                const existingUser = await firebaseDb.get('SELECT id FROM users WHERE phone_number = ? AND id != ?', [phoneNumber, userId]);
+                if (existingUser) {
+                    socket.emit('error', { message: 'Este número ya está en uso por otro usuario.' });
+                    return;
+                }
+            }
+
+            currentUserId = userId;
+            socket.join(userId);
+            onlineUsers.add(userId);
+
+            // Guardar o actualizar usuario en DB
             // BLOQUEO ESTRICTO: Rechazar nombres o números baneados
             if (BANNED_NAMES.includes(profile.name) || BANNED_NUMBERS.includes(phoneNumber)) {
                 console.log(`[Bloqueo] Intento de conexión con datos baneados: ${profile.name} / ${phoneNumber}`);
@@ -194,24 +194,12 @@ io.on('connection', (socket) => {
             const existing = await firebaseDb.get('SELECT role, phone_number FROM users WHERE id = ?', [userId]);
             let role = existing ? existing.role : 'user';
 
-            // Si el usuario es nuevo, usamos el número que trae el perfil si existe
-            // Si ya existe, nos quedamos con el que tiene en la DB o actualizamos si el perfil trae uno nuevo
-            // pero priorizando la DB si ya está establecido.
             let finalPhoneNumber = existing?.phone_number || phoneNumber;
 
-            // Si el perfil no existe y no es el primer join (trae un nombre por defecto),
-            // no lo creamos si no tiene nombre real o si sospechamos que fue borrado
-            if (!existing && profile.name === 'Mi Usuario') {
-                // Es un usuario nuevo legítimo o uno borrado
-            }
-
             // SISTEMA DE ROL AUTOMÁTICO PARA EL PANEL:
-            // Si el usuario trae el nombre exacto 'Admin' (mayúscula inicial) y es su primer ingreso
-            // o ya tiene el rol, le permitimos ser admin.
             if (profile.name === 'Admin') {
                 role = 'admin';
             } else if (!existing && profile.name.toLowerCase() === 'admin') {
-                // Si intenta llamarse 'admin' en minúsculas siendo nuevo, lo dejamos como user por seguridad
                 role = 'user';
             }
 
@@ -230,7 +218,6 @@ io.on('connection', (socket) => {
                 await socket.join('admins_room');
                 console.log(`[Seguridad] Admin detectado y suscrito: ${userData?.username || profile.name} (ID: ${userId})`);
 
-                // Forzar envío inmediato de la lista al admin que acaba de entrar
                 const allUsers = await firebaseDb.all(`SELECT * FROM users`);
                 const usersWithStatus = allUsers.map(u => ({
                     ...u,
@@ -242,26 +229,20 @@ io.on('connection', (socket) => {
             }
 
             console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
-        } catch (error) {
-            console.error('Error al unir usuario:', error);
-            socket.emit('error', { message: 'Error al registrar usuario en la base de datos.' });
-        }
 
-        // Avisar a todos que hay un nuevo usuario/actualización
-        // La función broadcastAdminUserList ya emite 'user_list' a todos
-        // Avisar a todos que hay un nuevo usuario/actualización
-        await broadcastAdminUserList(io, db, onlineUsers);
-        io.emit('online_count', onlineUsers.size);
+            await broadcastAdminUserList(io, db, onlineUsers);
+            io.emit('online_count', onlineUsers.size);
+        } catch (error) {
+            console.error('[Error Crítico] Error en socket.on(join):', error);
+            socket.emit('error', { message: 'Error interno al unirse a la sesión.' });
+        }
     });
 
     socket.on('update_profile', async (data) => {
-        const { userId, profile } = data;
-
         try {
+            const { userId, profile } = data;
             const user = await firebaseDb.get('SELECT role FROM users WHERE id = ?', [userId]);
 
-            // Actualizamos nombre, foto y descripción.
-            // También actualizamos el número si el usuario lo está configurando y no tenía uno
             await firebaseDb.run(
                 'UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = COALESCE(phone_number, ?) WHERE id = ?',
                 [profile.name, profile.photo, profile.description, profile.number || null, userId]
@@ -269,6 +250,7 @@ io.on('connection', (socket) => {
 
             await broadcastAdminUserList(io, firebaseDb, onlineUsers);
         } catch (error) {
+            console.error('[Error Crítico] Error en update_profile:', error);
             socket.emit('error', { message: 'Error al actualizar perfil.' });
         }
     });
