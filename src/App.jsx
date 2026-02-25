@@ -110,7 +110,10 @@ function App() {
   }, [blockedUsers]);
 
   useEffect(() => {
-    localStorage.setItem('konek_profile', JSON.stringify(profile));
+    // Solo guardar si el perfil tiene datos válidos (evitar resetear con valores iniciales vacíos si el componente se monta/desmonta)
+    if (profile && profile.name) {
+      localStorage.setItem('konek_profile', JSON.stringify(profile));
+    }
   }, [profile]);
 
   useEffect(() => {
@@ -1074,6 +1077,18 @@ function App() {
                 {profile.photo ? <img src={profile.photo} /> : <div className="placeholder"><Camera size={50} /></div>}
                 <div className="overlay"><Camera size={24} /> AÑADIR FOTO</div>
               </div>
+
+              {/* Nuevo: Input de archivo duplicado o referencia correcta para el onboarding */}
+              <input
+                type="file"
+                ref={(el) => {
+                  // Mantenemos la referencia principal y la opcional para que no falle
+                  profilePhotoInputRef.current = el;
+                }}
+                style={{ display: 'none' }}
+                accept="image/*"
+                onChange={handleProfilePhotoUpload}
+              />
 
               <div className="input-group">
                 <label>¿Cómo te llamas?</label>
