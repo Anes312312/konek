@@ -115,32 +115,57 @@ const firebaseDb = {
     get: async (query, params = []) => {
         if (!db) return null;
 
-        // Selección de ID de Admin (para unicidad)
-        if (query.includes('FROM users WHERE role = \'admin\'')) {
-            const snap = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-            if (snap.empty) return null;
-            return { id: snap.docs[0].id, ...snap.docs[0].data() };
-        }
+        try {
+            // Selección de ID de Admin (para unicidad)
+            if (query.includes('FROM users WHERE role = \'admin\'')) {
+                const snap = await db.collection('users').where('role', '==', 'admin').limit(1).get();
+                if (snap.empty) return null;
+                return { id: snap.docs[0].id, ...snap.docs[0].data() };
+            }
 
-        if (query.includes('FROM users WHERE id = ?') || query.includes('FROM users WHERE phone_number = ?')) {
-            const val = params[0];
-            const isId = query.includes('id = ?');
+            // CASO ESPECIAL: WHERE phone_number = ? AND id != ?
+            // Usado al hacer join para verificar si otro usuario ya tiene ese número
+            if (query.includes('phone_number = ?') && query.includes('id != ?')) {
+                const phoneNumber = params[0];
+                const excludeId = params[1];
+                const snap = await db.collection('users').where('phone_number', '==', phoneNumber).limit(5).get();
+                if (snap.empty) return null;
+                // Buscar uno que NO sea el ID excluido
+                const match = snap.docs.find(doc => doc.id !== excludeId);
+                return match ? { id: match.id, ...match.data() } : null;
+            }
 
-            if (isId) {
-                const doc = await db.collection('users').doc(val).get();
-                return doc.exists ? { id: doc.id, ...doc.data() } : null;
-            } else {
-                const snap = await db.collection('users').where('phone_number', '==', val).limit(1).get();
+            // Búsqueda por phone_number solamente
+            if (query.includes('phone_number = ?') && !query.includes('id')) {
+                const snap = await db.collection('users').where('phone_number', '==', params[0]).limit(1).get();
                 return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
             }
-        }
 
-        if (query.includes('FROM deleted_ids WHERE id = ?')) {
-            const snap = await db.collection('deleted_ids').doc(params[0]).get();
-            return snap.exists ? { id: snap.id } : null;
-        }
+            // Búsqueda por ID de usuario
+            if (query.includes('FROM users') && query.includes('id = ?')) {
+                const docId = params[0] || params[params.length - 1];
+                const doc = await db.collection('users').doc(docId).get();
+                return doc.exists ? { id: doc.id, ...doc.data() } : null;
+            }
 
-        return null;
+            // Búsqueda en deleted_ids
+            if (query.includes('FROM deleted_ids WHERE id = ?')) {
+                const snap = await db.collection('deleted_ids').doc(params[0]).get();
+                return snap.exists ? { id: snap.id } : null;
+            }
+
+            // Búsqueda de uploads
+            if (query.includes('FROM uploads WHERE id = ?')) {
+                const doc = await db.collection('uploads').doc(params[0]).get();
+                return doc.exists ? { id: doc.id, ...doc.data() } : null;
+            }
+
+            console.warn(`[Firebase] get() no manejó la consulta: ${query}`);
+            return null;
+        } catch (err) {
+            console.error(`[Firebase Error] get() falló:`, err.message, '| Query:', query, '| Params:', params);
+            return null;
+        }
     },
 
     run: async (query, params = []) => {
@@ -192,6 +217,7 @@ const firebaseDb = {
             if (query.includes('INSERT')) {
                 // Mapeo inteligente de parámetros según su cantidad
                 if (params.length === 6) {
+                    // INSERT INTO users (id, username, profile_pic, status, phone_number, role)
                     const [idVal, username, profile_pic, status, phone_number, role] = params;
                     data.username = username;
                     data.profile_pic = profile_pic;
@@ -199,32 +225,62 @@ const firebaseDb = {
                     data.phone_number = phone_number;
                     data.role = role;
                 } else if (params.length === 4) {
-                    // Caso admin_create_user
+                    // admin_create_user: INSERT INTO users (id, username, phone_number, role)
                     const [idVal, username, phone_number, role] = params;
                     data.username = username;
                     data.phone_number = phone_number;
                     data.role = role;
                 }
+            } else if (query.includes('UPDATE users SET username = ?, phone_number = ?, role = ? WHERE id = ?')) {
+                // admin_update_user: params = [username, phone_number, role, userId]
+                data.username = params[0];
+                data.phone_number = params[1];
+                data.role = params[2];
+            } else if (query.includes('COALESCE')) {
+                // update_profile: UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = COALESCE(phone_number, ?) WHERE id = ?
+                // params = [name, photo, description, number, userId]
+                data.username = params[0];
+                data.profile_pic = params[1];
+                data.status = params[2];
+                // phone_number solo se establece si no tenía uno (COALESCE)
+                // En Firestore, haremos merge, así que seteamos si no es null
+                if (params[3]) data.phone_number = params[3];
             } else {
-                // Update simple
-                if (query.includes('username = ?')) data.username = params[0];
-                if (query.includes('profile_pic = ?')) data.profile_pic = params[1];
-                if (query.includes('status = ?')) data.status = params[2];
-                if (query.includes('role = ?')) {
-                    // El role suele ser el 3er parámetro en el update de admin o el 5to si es insert...
-                    // pero aquí lo buscamos por índice específico según el query del admin_update_user
-                    if (query.includes('phone_number = ?, role = ?')) data.role = params[2];
-                    else data.role = params[0]; // fallback
-                }
-                if (query.includes('phone_number = ?')) {
-                    data.phone_number = params[query.includes('COALESCE') ? 3 : 1];
-                }
+                // Update genérico fallback - intentar parsear por posición
+                console.warn('[Firebase] UPDATE genérico detectado:', query, params);
+                if (params.length >= 1) data.username = params[0];
+                if (params.length >= 2) data.phone_number = params[1];
+                if (params.length >= 3) data.role = params[2];
             }
 
             // Eliminar campos undefined para evitar errores de Firestore
             Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
 
+            console.log(`[Firebase Debug] run() SET doc '${id}' con data:`, JSON.stringify(data));
             await db.collection('users').doc(id).set(data, { merge: true });
+            return;
+        }
+
+        // INSERT/UPDATE UPLOAD
+        if (query.includes('INSERT INTO uploads')) {
+            const [id, file_name, total_size, status] = params;
+            await db.collection('uploads').doc(id).set({
+                file_name, total_size, current_size: 0, status,
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return;
+        }
+
+        if (query.includes('UPDATE uploads SET')) {
+            if (query.includes('current_size = current_size + ?')) {
+                const increment = params[0];
+                const id = params[1];
+                await db.collection('uploads').doc(id).update({
+                    current_size: admin.firestore.FieldValue.increment(increment)
+                });
+            } else if (query.includes('status = ?')) {
+                await db.collection('uploads').doc(params[1]).update({ status: params[0] });
+            }
             return;
         }
 
@@ -254,6 +310,33 @@ const firebaseDb = {
             return;
         }
 
+        if (query.includes('DELETE FROM users WHERE phone_number = ?')) {
+            const snap = await db.collection('users').where('phone_number', '==', params[0]).get();
+            const batch = db.batch();
+            snap.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            return;
+        }
+
+        if (query.includes('DELETE FROM messages WHERE sender_id = ?')) {
+            // Borrar mensajes donde el usuario es sender o receiver
+            const snap1 = await db.collection('messages').where('sender_id', '==', params[0]).get();
+            const snap2 = await db.collection('messages').where('receiver_id', '==', params[1] || params[0]).get();
+            const batch = db.batch();
+            snap1.forEach(doc => batch.delete(doc.ref));
+            snap2.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            return;
+        }
+
+        if (query.includes('DELETE FROM statuses WHERE') && query.includes('user_id = ?')) {
+            const snap = await db.collection('statuses').where('user_id', '==', params[0]).get();
+            const batch = db.batch();
+            snap.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            return;
+        }
+
         if (query.includes('DELETE FROM statuses WHERE id = ?')) {
             await db.collection('statuses').doc(params[0]).delete();
             return;
@@ -264,6 +347,8 @@ const firebaseDb = {
             await db.collection('deleted_ids').doc(params[0]).set({ timestamp: admin.firestore.FieldValue.serverTimestamp() });
             return;
         }
+
+        console.warn(`[Firebase] run() no manejó la consulta: ${query}`);
 
     },
 
