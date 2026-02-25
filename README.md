@@ -1,16 +1,29 @@
-# React + Vite
+# Konek.fun - Mensajería de Alto Rendimiento
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Konek es una plataforma de mensajería premium diseñada para el intercambio seguro de archivos grandes (90GB+) y comunicación en tiempo real.
 
-Currently, two official plugins are available:
+## 🚀 Despliegue en Producción (konek.fun)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Este proyecto está configurado para ejecutarse en entornos de nube como **Render** o **Railway**.
 
-## React Compiler
+### Configuración del Servidor
+- **Puerto**: 5000 (Backend) / Dominio Principal (Frontend)
+- **Dominio**: `https://konek.fun`
+- **Base de Datos**: SQLite con persistencia habilitada mediante variables de entorno.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Variables de Entorno Requeridas
+- `PERSISTENT_DATA_PATH`: Ruta al directorio donde se guardará la base de datos `konek.db` y los archivos subidos.
 
-## Expanding the ESLint configuration
+## 🛠️ Tecnologías
+- **Frontend**: React + Vite + Tailwind/CSS
+- **Backend**: Node.js + Socket.io
+- **Base de Datos**: SQLite3
+- **Gestión de Archivos**: Sistema de fragmentación (chunking) de 10MB para archivos masivos.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 📦 Instalación Local
+1. `npm install`
+2. `npm run dev` (Frontend)
+3. `npm start` (Backend)
+
+---
+© 2026 Konek Fun. Todos los derechos reservados.

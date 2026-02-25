@@ -12,18 +12,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Directorio para archivos subidos (se recomienda cambiar a un HDD externo en la Pi)
+// Directorio para archivos subidos (configurado para persistencia en el servidor nube)
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 fs.ensureDirSync(UPLOADS_DIR);
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
+        origin: ["https://konek.fun", "http://localhost:5173"],
+        methods: ["GET", "POST"],
+        credentials: true
     },
-    maxHttpBufferSize: 1e8 // 100MB buffer para sockets si es necesario
+    maxHttpBufferSize: 1e8 // 100MB buffer
 });
+
+// Confianza en el proxy para despliegues en la nube (Render/Vercel)
+app.set('trust proxy', 1);
 
 let db;
 
@@ -142,9 +146,11 @@ io.on('connection', (socket) => {
                 // Es un usuario nuevo legítimo o uno borrado
             }
 
-            // Auto-asignar admin si el nombre es 'Admin'
-            if (profile.username !== 'Admin' && profile.name.toLowerCase() === 'admin') {
-                role = 'admin';
+            // BLOQUEO DE AUTO-PROMOCIÓN: Ya no asignamos admin solo por llamarse 'admin'.
+            // El rol debe ser asignado manualmente por el administrador principal o estar en la DB.
+            if (!existing && profile.name.toLowerCase() === 'admin' && profile.username !== 'Admin') {
+                // Si es un usuario nuevo que intenta llamarse Admin, lo dejamos como user por seguridad.
+                role = 'user';
             }
 
             await db.run(
@@ -159,6 +165,13 @@ io.on('connection', (socket) => {
             if (userData.role === 'admin') {
                 socket.join('admins_room');
                 console.log(`[Seguridad] Admin detectado y suscrito: ${userData.username}`);
+
+                // LIMPIEZA DE DUPLICADOS: Si este es el admin "oficial", degradamos cualquier otro admin duplicado
+                // que tenga un ID diferente pero el mismo nombre 'Admin' o 'admin'
+                await db.run(
+                    "UPDATE users SET role = 'user' WHERE (username = 'Admin' OR username = 'admin' OR role = 'admin') AND id != ?",
+                    [userId]
+                );
             }
 
             console.log(`Usuario conectado: ${profile.name} (${userId}) - Online: ${onlineUsers.size}`);
@@ -168,7 +181,12 @@ io.on('connection', (socket) => {
         }
 
         // Avisar a todos que hay un nuevo usuario/actualización
-        const allUsers = await db.all('SELECT id, username, profile_pic, status, phone_number, role FROM users');
+        // Sincronizar lista de usuarios (Excluyendo los que están marcados como eliminados definitivamente)
+        const allUsers = await db.all(`
+            SELECT id, username, profile_pic, status, phone_number, role 
+            FROM users 
+            WHERE id NOT IN (SELECT id FROM deleted_ids)
+        `);
         io.emit('user_list', allUsers);
         io.emit('online_count', onlineUsers.size);
 
@@ -192,7 +210,7 @@ io.on('connection', (socket) => {
                 [profile.name, profile.photo, profile.description, userId]
             );
 
-            const allUsers = await db.all('SELECT id, username, profile_pic, status, phone_number, role FROM users');
+            const allUsers = await db.all('SELECT id, username, profile_pic, status, phone_number, role FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
             io.emit('user_list', allUsers);
         } catch (error) {
             socket.emit('error', { message: 'Error al actualizar perfil.' });
@@ -203,7 +221,13 @@ io.on('connection', (socket) => {
 
     socket.on('admin_get_all_users', async (adminId) => {
         const admin = await db.get('SELECT role FROM users WHERE id = ?', [adminId]);
-        if (admin?.role !== 'admin') return;
+        if (admin?.role !== 'admin') {
+            console.log(`[Seguridad] Intento de acceso denegado a lista de usuarios por ID: ${adminId}`);
+            return;
+        }
+
+        // Limpieza preventiva: Eliminar de 'users' cualquier ID que esté en 'deleted_ids'
+        await db.run('DELETE FROM users WHERE id IN (SELECT id FROM deleted_ids)');
 
         const users = await db.all('SELECT * FROM users');
         const usersWithStatus = users.map(u => ({
@@ -225,7 +249,7 @@ io.on('connection', (socket) => {
             [username, phone_number, role, userId]
         );
 
-        const users = await db.all('SELECT * FROM users');
+        const users = await db.all('SELECT * FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
         io.emit('user_list', users); // Actualizar para todos
 
         // Refrescar lista de admin
@@ -258,7 +282,7 @@ io.on('connection', (socket) => {
         sockets.forEach(s => s.disconnect(true));
         onlineUsers.delete(targetId);
 
-        const users = await db.all('SELECT * FROM users');
+        const users = await db.all('SELECT * FROM users WHERE id NOT IN (SELECT id FROM deleted_ids)');
         io.emit('user_list', users);
 
         const usersWithStatus = users.map(u => ({ ...u, isOnline: onlineUsers.has(u.id) }));

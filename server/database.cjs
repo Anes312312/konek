@@ -60,6 +60,9 @@ async function setupDatabase() {
             id TEXT PRIMARY KEY,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Purga preventiva de usuarios eliminados
+        DELETE FROM users WHERE id IN (SELECT id FROM deleted_ids);
     `);
 
     // Asegurar que las columnas nuevas existan si la DB ya estaba creada

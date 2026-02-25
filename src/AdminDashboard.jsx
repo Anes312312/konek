@@ -3,9 +3,9 @@ import io from 'socket.io-client';
 import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Camera } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.'))
-    ? `http://${window.location.hostname}:5000`
-    : window.location.origin;
+const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? `${window.location.protocol}//${window.location.hostname}:5000`
+    : 'https://konek.fun';
 
 function AdminDashboard() {
     const [adminUsers, setAdminUsers] = useState([]);
@@ -14,7 +14,8 @@ function AdminDashboard() {
     const socketRef = useRef();
 
     // Generar o recuperar ID de Admin (puedes hacerlo más formal luego)
-    const [adminId] = useState(() => localStorage.getItem('konek_admin_id') || 'admin_' + Math.random().toString(36).substr(2, 9));
+    // Usamos el mismo ID que el chat principal para evitar duplicados
+    const [adminId] = useState(() => localStorage.getItem('konek_userId') || 'admin_temp_' + Math.random().toString(36).substr(2, 9));
 
     useEffect(() => {
         localStorage.setItem('konek_admin_id', adminId);

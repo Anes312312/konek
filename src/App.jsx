@@ -15,9 +15,10 @@ import './index.css';
 
 
 // Configuración del servidor dinámica
-const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.'))
-  ? `http://${window.location.hostname}:5000`
-  : window.location.origin;
+// Configuración para el dominio konek.fun
+const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? `${window.location.protocol}//${window.location.hostname}:5000`
+  : 'https://konek.fun';
 
 function App() {
   const [messages, setMessages] = useState([]);
