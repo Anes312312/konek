@@ -1,11 +1,12 @@
-const CACHE_NAME = 'konek-v4';
+const CACHE_NAME = 'konek-v5';
 const urlsToCache = [
     '/',
     '/index.html',
     '/manifest.json',
     '/icon-192.png',
     '/icon-512.png',
-    '/favicon.png?v=2'
+    '/favicon.png?v=2',
+    '/splash.png'
 ];
 
 self.addEventListener('install', event => {
