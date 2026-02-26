@@ -26,6 +26,7 @@ body {
 
 #root {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -38,6 +39,7 @@ body {
   background-color: var(--wa-bg);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   border: 1px solid var(--wa-border);
+  overflow: hidden;
 }
 
 /* Sidebar Styling */
@@ -107,6 +109,7 @@ body {
   background-repeat: repeat;
   background-blend-mode: overlay;
   background-color: #0b141a;
+  overflow: hidden;
 }
 
 .chat-placeholder {
@@ -142,6 +145,7 @@ body {
 
 .chat-header {
   height: 60px;
+  flex-shrink: 0;
   background-color: var(--wa-header);
   padding: 10px 16px;
   display: flex;
