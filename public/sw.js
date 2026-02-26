@@ -1,4 +1,4 @@
-const CACHE_NAME = 'konek-v2';
+const CACHE_NAME = 'konek-v3';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -34,11 +34,16 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // Network First strategy
+    // Solo manejamos peticiones GET
+    if (event.request.method !== 'GET') return;
+    // Ignorar extensiones de Chrome u otros esquemas
+    if (!event.request.url.startsWith('http')) return;
+
+    // Estrategia: Network First (La red primero, caché como respaldo)
     event.respondWith(
         fetch(event.request)
             .then(response => {
-                // Clona y actualiza la caché si la red es exitosa
+                // Guardar una copia en la caché para la próxima vez que estemos sin internet
                 if (response && response.status === 200 && response.type === 'basic') {
                     const responseToCache = response.clone();
                     caches.open(CACHE_NAME).then(cache => {
@@ -48,8 +53,23 @@ self.addEventListener('fetch', event => {
                 return response;
             })
             .catch(() => {
-                // Fails a la red -> busca en caché
-                return caches.match(event.request);
+                // Falla la conexión (ej. sin internet o interrupción temporal)
+                // Usamos ignoreSearch para que querystrings como ?view=admin coincidan con "/" o "/index.html"
+                return caches.match(event.request, { ignoreSearch: true })
+                    .then(cachedResponse => {
+                        if (cachedResponse) {
+                            return cachedResponse;
+                        }
+                        // Para navegaciones fallback al index.html
+                        if (event.request.mode === 'navigate') {
+                            return caches.match('/index.html');
+                        }
+                        // Respuesta offline genérica
+                        return new Response('Internet Connection Offline', {
+                            status: 503,
+                            headers: { 'Content-Type': 'text/plain' }
+                        });
+                    });
             })
     );
 });
