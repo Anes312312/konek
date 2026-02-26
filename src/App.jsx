@@ -1238,6 +1238,10 @@ function App() {
                       type="text"
                       className="message-input"
                       placeholder="Escribe un mensaje"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
