@@ -920,7 +920,7 @@ function App() {
                 }, {});
 
                 return Object.values(grouped)
-                  .filter(g => g.user_id !== userId)
+                  .filter(g => g.user_id !== userId && availableUsers.some(u => u.id === g.user_id))
                   .sort((a, b) => new Date(b.items[0].timestamp) - new Date(a.items[0].timestamp))
                   .map(group => (
                     <div key={group.user_id} className="status-item" onClick={() => {
