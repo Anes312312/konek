@@ -86,6 +86,16 @@ function App() {
     }
   });
 
+  const [clearedChats, setClearedChats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('konek_cleared_chats');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+
   const [showContactProfile, setShowContactProfile] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [isLinking, setIsLinking] = useState(false);
@@ -112,6 +122,10 @@ function App() {
   }, [blockedUsers]);
 
   useEffect(() => {
+    localStorage.setItem('konek_cleared_chats', JSON.stringify(clearedChats));
+  }, [clearedChats]);
+
+  useEffect(() => {
     // Solo guardar si el perfil tiene datos válidos (evitar resetear con valores iniciales vacíos si el componente se monta/desmonta)
     if (profile && profile.name) {
       localStorage.setItem('konek_profile', JSON.stringify(profile));
@@ -128,10 +142,15 @@ function App() {
   const profilePhotoInputRef = useRef();
   const statusInputRef = useRef();
   const blockedUsersRef = useRef(blockedUsers);
+  const clearedChatsRef = useRef(clearedChats);
 
   useEffect(() => {
     blockedUsersRef.current = blockedUsers;
   }, [blockedUsers]);
+
+  useEffect(() => {
+    clearedChatsRef.current = clearedChats;
+  }, [clearedChats]);
 
 
   useEffect(() => {
@@ -244,7 +263,13 @@ function App() {
     });
 
     socketRef.current.on('chat_history', ({ contactId, messages: history }) => {
-      setMessages(history);
+      const clears = clearedChatsRef.current;
+      let filteredHistory = history;
+      if (contactId && clears[contactId]) {
+        const clearTime = new Date(clears[contactId]).getTime();
+        filteredHistory = history.filter(m => new Date(m.timestamp).getTime() > clearTime);
+      }
+      setMessages(filteredHistory);
     });
 
     socketRef.current.on('user_list', (users) => {
@@ -559,6 +584,8 @@ function App() {
 
   const deleteChat = (userIdToDelete) => {
     if (window.confirm('¿Estás seguro de que deseas vaciar este chat? Se eliminará la lista de mensajes localmente.')) {
+      const now = new Date().toISOString();
+      setClearedChats(prev => ({ ...prev, [userIdToDelete]: now }));
       setMessages(prev => prev.filter(msg =>
         !((msg.sender_id === userId && msg.receiver_id === userIdToDelete) ||
           (msg.sender_id === userIdToDelete && msg.receiver_id === userId))
@@ -572,6 +599,8 @@ function App() {
 
   const deleteContact = (userIdToDelete) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este contacto? Se vaciará el chat.')) {
+      const now = new Date().toISOString();
+      setClearedChats(prev => ({ ...prev, [userIdToDelete]: now }));
       setAvailableUsers(prev => prev.filter(u => u.id !== userIdToDelete));
       setMessages(prev => prev.filter(msg =>
         !((msg.sender_id === userId && msg.receiver_id === userIdToDelete) ||
