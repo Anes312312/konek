@@ -1,4 +1,4 @@
-const CACHE_NAME = 'konek-v1';
+const CACHE_NAME = 'konek-v2';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -34,16 +34,22 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    // Network First strategy
     event.respondWith(
-        caches.match(event.request)
+        fetch(event.request)
             .then(response => {
-                // Cache hit - return response
-                if (response) {
-                    return response;
+                // Clona y actualiza la caché si la red es exitosa
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(event.request, responseToCache);
+                    });
                 }
-                return fetch(event.request).catch(() => {
-                    // Opcional: retornar una página offline genérica aquí
-                });
+                return response;
+            })
+            .catch(() => {
+                // Fails a la red -> busca en caché
+                return caches.match(event.request);
             })
     );
 });
