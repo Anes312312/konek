@@ -86,6 +86,7 @@ function App() {
     }
   });
 
+  const [showContactProfile, setShowContactProfile] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [isLinking, setIsLinking] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -353,9 +354,9 @@ function App() {
       }));
 
       if (activeChat.id === 'global') {
-        socketRef.current.emit('request_global_history');
+        socketRef.current.emit('request_history', { userId, contactId: 'global' });
       } else {
-        socketRef.current.emit('request_chat_history', { userId, contactId: activeChat.id });
+        socketRef.current.emit('request_history', { userId, contactId: activeChat.id });
       }
     }
   }, [activeChat, userId]);
@@ -924,14 +925,25 @@ function App() {
         ) : (
           <>
             <div className="chat-header">
-              <div className="avatar" style={{ width: 40, height: 40, background: '#00a884', borderRadius: '50%', marginRight: 12, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {availableUsers.find(u => u.id === activeChat.id)?.profile_pic ? (
-                  <img src={availableUsers.find(u => u.id === activeChat.id).profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : <User color="white" size={20} />}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500 }}>{activeChat.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>Chat Privado</div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flex: 1 }}
+                onClick={() => {
+                  if (activeChat.id !== 'global') {
+                    setShowContactProfile(true);
+                  }
+                }}
+              >
+                <div className="avatar" style={{ width: 40, height: 40, background: '#00a884', borderRadius: '50%', marginRight: 12, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {availableUsers.find(u => u.id === activeChat.id)?.profile_pic ? (
+                    <img src={availableUsers.find(u => u.id === activeChat.id).profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : <User color="white" size={20} />}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>{activeChat.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>
+                    {activeChat.id === 'global' ? 'Chat Público' : 'Chat Privado'}
+                  </div>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 15, position: 'relative' }}>
                 <button className="icon-btn"><Search size={20} /></button>
@@ -1285,6 +1297,70 @@ function App() {
           </button>
         </div>
       )}
+
+      {/* Modal Perfil de Contacto */}
+      {showContactProfile && activeChat && (
+        <div className="modal-overlay" onClick={() => setShowContactProfile(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ background: '#111b21', color: '#e9edef', width: '350px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <h3>Info. del contacto</h3>
+              <button onClick={() => setShowContactProfile(false)} className="icon-btn">
+                <X size={24} color="white" />
+              </button>
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div
+                style={{
+                  width: '150px',
+                  height: '150px',
+                  borderRadius: '50%',
+                  background: '#6a7175',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  marginBottom: '20px'
+                }}
+              >
+                {availableUsers.find(u => u.id === activeChat.id)?.profile_pic ? (
+                  <img src={availableUsers.find(u => u.id === activeChat.id).profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : <User size={80} color="white" />}
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: '400', marginBottom: '5px' }}>
+                {activeChat.name}
+              </h2>
+              <div style={{ fontSize: '16px', color: 'var(--wa-text-secondary)', marginBottom: '20px' }}>
+                {availableUsers.find(u => u.id === activeChat.id)?.phone_number || 'Sin número'}
+              </div>
+            </div>
+
+            <div style={{ background: '#202c33', padding: '15px 20px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '14px', color: 'var(--wa-text-secondary)', marginBottom: '5px' }}>Info.</div>
+              <div style={{ fontSize: '16px' }}>
+                {availableUsers.find(u => u.id === activeChat.id)?.status || '¡Hola! Estoy usando Konek Fun.'}
+              </div>
+            </div>
+
+            <div style={{ background: '#202c33', padding: '15px 20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ color: '#ef4444', display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => {
+                toggleBlockUser(activeChat);
+                setShowContactProfile(false);
+              }}>
+                <ShieldCheck size={20} style={{ marginRight: '15px' }} />
+                {blockedUsers.includes(activeChat.id) ? 'Desbloquear contacto' : 'Bloquear contacto'}
+              </div>
+              <div style={{ color: '#ef4444', display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => {
+                deleteChat(activeChat.id);
+                setShowContactProfile(false);
+              }}>
+                <Trash2 size={20} style={{ marginRight: '15px' }} />
+                Vaciar chat
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Visor de Estados */}
       {viewingGroup && (

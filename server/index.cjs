@@ -17,6 +17,8 @@ fs.ensureDirSync(UPLOADS_DIR);
 const usersMap = new Map();        // userId -> userData (solo usuarios del chat, NO admin)
 const onlineUsers = new Set();     // userIds actualmente conectados
 const deletedIds = new Set();      // IDs eliminados permanentemente
+const messagesList = [];           // Cache en memoria para mensajes (útil para uso local sin bd)
+let statusesList = [];             // Cache en memoria para estados
 
 // ===== EXPRESS + SOCKET.IO =====
 const app = express();
@@ -340,7 +342,22 @@ io.on('connection', (socket) => {
                 file_url: data.file_url || data?.file_info?.path || ''
             };
             firestore.saveMessage(msgId, msg).catch(() => { });
-            const emit = { id: msgId, ...msg, timestamp: new Date().toISOString(), type: msg.message_type, file_info: data.file_info };
+            const emit = {
+                id: msgId,
+                ...msg,
+                timestamp: new Date().toISOString(),
+                type: msg.message_type,
+                file_info: data.file_info
+            };
+
+            const senderData = usersMap.get(senderId);
+            if (senderData) {
+                emit.sender_name = senderData.username;
+                emit.sender_pic = senderData.profile_pic;
+                emit.sender_phone = senderData.phone_number;
+            }
+
+            messagesList.push(emit);
 
             if (msg.receiver_id === 'global') {
                 io.emit('receive_message', emit);
@@ -361,9 +378,14 @@ io.on('connection', (socket) => {
             if (!userId) return;
             let msgs = [];
             if (!contactId || contactId === 'global') {
-                msgs = await firestore.getGlobalMessages();
+                msgs = messagesList.filter(m => m.receiver_id === 'global');
+                if (msgs.length === 0) msgs = await firestore.getGlobalMessages();
             } else {
-                msgs = await firestore.getPrivateMessages(userId, contactId);
+                msgs = messagesList.filter(m =>
+                    (m.sender_id === userId && m.receiver_id === contactId) ||
+                    (m.sender_id === contactId && m.receiver_id === userId)
+                );
+                if (msgs.length === 0) msgs = await firestore.getPrivateMessages(userId, contactId);
             }
             socket.emit('chat_history', { contactId, messages: msgs });
         } catch (e) {
@@ -392,13 +414,31 @@ io.on('connection', (socket) => {
         try {
             const id = uuidv4();
             const statusOwner = data.userId || data.user_id;
-            await firestore.saveStatus(id, {
+
+            const newStatus = {
+                id,
                 user_id: statusOwner,
                 content: data.content || '',
                 media_url: data.media_url || '',
-                type: data.type || 'text'
+                type: data.type || 'text',
+                timestamp: new Date().toISOString()
+            };
+            statusesList.push(newStatus);
+
+            firestore.saveStatus(id, newStatus).catch(() => { });
+
+            let all = [...statusesList];
+            if (all.length === 0) all = await firestore.getStatuses();
+
+            // Re-enriquecer statuses con los nombres de usuario actualizados si se puede
+            all = all.map(s => {
+                const u = usersMap.get(s.user_id);
+                if (u) {
+                    return { ...s, username: u.username, profile_pic: u.profile_pic };
+                }
+                return s;
             });
-            const all = await firestore.getStatuses();
+
             io.emit('status_update', all);
             // También enviarlo por status_list para asegurar compatibilidad
             io.emit('status_list', all);
@@ -409,18 +449,43 @@ io.on('connection', (socket) => {
 
     socket.on('request_statuses', async () => {
         try {
-            const s = await firestore.getStatuses();
+            let s = [...statusesList];
+            if (s.length === 0) s = await firestore.getStatuses();
+
+            s = s.map(status => {
+                const u = usersMap.get(status.user_id);
+                if (u) {
+                    return { ...status, username: u.username, profile_pic: u.profile_pic };
+                }
+                return status;
+            });
+
             socket.emit('status_update', s);
+            socket.emit('status_list', s); // Compatibilidad
         } catch (e) {
             socket.emit('status_update', []);
+            socket.emit('status_list', []);
         }
     });
 
     socket.on('delete_status', async (id) => {
         try {
-            await firestore.deleteStatus(id);
-            const s = await firestore.getStatuses();
+            statusesList = statusesList.filter(s => s.id !== id);
+            firestore.deleteStatus(id).catch(() => { });
+
+            let s = [...statusesList];
+            if (s.length === 0) s = await firestore.getStatuses();
+
+            s = s.map(status => {
+                const u = usersMap.get(status.user_id);
+                if (u) {
+                    return { ...status, username: u.username, profile_pic: u.profile_pic };
+                }
+                return status;
+            });
+
             io.emit('status_update', s);
+            io.emit('status_list', s);
         } catch (e) { }
     });
 
