@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDashed, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 // Eliminamos la librería que daba problemas y usamos un set de emojis estándar y seguro
@@ -95,6 +95,18 @@ function App() {
     }
   });
 
+  const [viewedStatuses, setViewedStatuses] = useState(() => {
+    try {
+      const saved = localStorage.getItem('konek_viewed_statuses');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('konek_viewed_statuses', JSON.stringify(viewedStatuses));
+  }, [viewedStatuses]);
 
   const [showContactProfile, setShowContactProfile] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
@@ -155,7 +167,11 @@ function App() {
 
   useEffect(() => {
     let timer;
-    if (viewingGroup) {
+    if (viewingGroup && viewingGroup.items[currentIdx]) {
+      const currentItem = viewingGroup.items[currentIdx];
+      if (!viewedStatuses.includes(currentItem.id)) {
+        setViewedStatuses(prev => [...prev, currentItem.id]);
+      }
       timer = setTimeout(() => {
         if (currentIdx < viewingGroup.items.length - 1) {
           setCurrentIdx(prev => prev + 1);
@@ -212,7 +228,18 @@ function App() {
           else if (message.type === 'audio') bodyText = '🎵 Audio';
           else if (message.type === 'file') bodyText = '📄 Archivo';
 
-          new Notification(contactName, { body: bodyText });
+          if (navigator.serviceWorker) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(contactName, {
+                body: bodyText,
+                icon: '/icon-192.png',
+                vibrate: [200, 100, 200],
+                tag: 'konek-message'
+              });
+            });
+          } else {
+            new Notification(contactName, { body: bodyText, vibrate: [200, 100, 200] });
+          }
         }
       }
 
@@ -778,7 +805,7 @@ function App() {
               socketRef.current.emit('request_statuses');
             }}
           >
-            <CircleDot size={20} />
+            <CircleDashed size={20} />
             <span>ESTADOS</span>
           </div>
         </div>
@@ -964,25 +991,53 @@ function App() {
                   return acc;
                 }, {});
 
-                return Object.values(grouped)
+                // Separar los grupos en dos arreglos: vistos todos y no vistos
+                const unreadGroups = [];
+                const readGroups = [];
+
+                Object.values(grouped)
                   .filter(g => g.user_id !== userId && availableUsers.some(u => u.id === g.user_id))
-                  .sort((a, b) => new Date(b.items[0].timestamp) - new Date(a.items[0].timestamp))
-                  .map(group => (
-                    <div key={group.user_id} className="status-item" onClick={() => {
-                      setViewingGroup(group);
-                      setCurrentIdx(0);
-                    }}>
-                      <div className="avatar status-ring" style={{ width: 48, height: 48, background: '#6a7175', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {group.profile_pic ? <img src={group.profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" />}
-                      </div>
-                      <div style={{ flex: 1, marginLeft: 15 }}>
-                        <div style={{ fontWeight: 500 }}>{group.username}</div>
-                        <div style={{ fontSize: 13, color: 'var(--wa-text-secondary)', marginTop: 4 }}>
-                          {new Date(group.items[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                  .forEach(group => {
+                    // Ordenar elementos asc o mantener como vienen (idealmente mas viejo al mas nuevo)
+                    const allSeen = group.items.every(item => viewedStatuses.includes(item.id));
+                    if (allSeen) readGroups.push(group);
+                    else unreadGroups.push(group);
+                  });
+
+                // Ordenar cada arreglo para que el estado más reciente de cada grupo esté arriba
+                unreadGroups.sort((a, b) => new Date(b.items[b.items.length - 1].timestamp) - new Date(a.items[a.items.length - 1].timestamp));
+                readGroups.sort((a, b) => new Date(b.items[b.items.length - 1].timestamp) - new Date(a.items[a.items.length - 1].timestamp));
+
+                const renderGroup = (group, isRead) => (
+                  <div key={group.user_id} className="status-item" onClick={() => {
+                    setViewingGroup(group);
+                    // Empezar en el primer estado no visto, o 0 si todos vistos
+                    let firstUnseenIdx = group.items.findIndex(i => !viewedStatuses.includes(i.id));
+                    setCurrentIdx(Math.max(0, firstUnseenIdx));
+                  }}>
+                    <div className={`avatar ${isRead ? 'status-ring-read' : 'status-ring'}`} style={{ width: 48, height: 48, background: '#6a7175', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {group.profile_pic ? <img src={group.profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" />}
+                    </div>
+                    <div style={{ flex: 1, marginLeft: 15 }}>
+                      <div style={{ fontWeight: 500 }}>{group.username}</div>
+                      <div style={{ fontSize: 13, color: 'var(--wa-text-secondary)', marginTop: 4 }}>
+                        {new Date(group.items[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                  ));
+                  </div>
+                );
+
+                return (
+                  <>
+                    {unreadGroups.map(g => renderGroup(g, false))}
+                    {readGroups.length > 0 && (
+                      <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--wa-accent)', fontWeight: 600, textTransform: 'uppercase', marginTop: 10 }}>
+                        VISTOS
+                      </div>
+                    )}
+                    {readGroups.map(g => renderGroup(g, true))}
+                  </>
+                );
               })()}
             </div>
           </div>

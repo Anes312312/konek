@@ -4,8 +4,8 @@
     "description": "La mejor conexión para ti",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#00a884",
-    "theme_color": "#00a884",
+    "background_color": "#0b141a",
+    "theme_color": "#0b141a",
     "orientation": "portrait",
     "icons": [
         {
