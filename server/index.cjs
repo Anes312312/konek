@@ -395,6 +395,16 @@ io.on('connection', (socket) => {
         } catch (e) { console.error('[mark_read]', e.message); }
     });
 
+    socket.on('typing_start', ({ senderId, receiverId }) => {
+        if (!senderId || !receiverId) return;
+        io.to(receiverId).emit('typing_start', { senderId });
+    });
+
+    socket.on('typing_stop', ({ senderId, receiverId }) => {
+        if (!senderId || !receiverId) return;
+        io.to(receiverId).emit('typing_stop', { senderId });
+    });
+
     socket.on('request_history', async (data) => {
         try {
             const { userId, contactId } = data || {};

@@ -94,6 +94,11 @@ body {
   background-color: var(--wa-input-bg);
 }
 
+.chat-item:active {
+  background-color: #2a3942;
+  transform: scale(0.98);
+}
+
 .chat-item.active {
   background-color: #2a3942;
 }
@@ -165,11 +170,25 @@ body {
 .message {
   max-width: 65%;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 12px;
   position: relative;
   font-size: 14.2px;
   line-height: 1.5;
   word-wrap: break-word;
+  animation: message-fade-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes message-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message.me {
@@ -185,11 +204,35 @@ body {
 }
 
 .message-time {
-  font-size: 11px;
-  color: var(--wa-text-secondary);
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.6);
   float: right;
   margin-top: 4px;
   margin-left: 8px;
+  font-weight: 500;
+}
+
+.message-checkmark {
+  display: inline-block;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message-checkmark.animate-read {
+  animation: pop-check 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes pop-check {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Input Area */
@@ -229,10 +272,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.15s ease, color 0.2s ease;
 }
 
 .icon-btn:hover {
   color: var(--wa-text);
+}
+
+.icon-btn:active {
+  transform: scale(0.9);
 }
 
 /* File Preview */

@@ -117,6 +117,10 @@ function App() {
     console.log('[Konek] Onboarding status:', { setupDone, isActuallyNew });
     return isActuallyNew;
   });
+  const [typingUsers, setTypingUsers] = useState({});
+  const typingTimeoutRef = useRef({});
+  const emitTypingTimeoutRef = useRef(null);
+  const [fullscreenImage, setFullscreenImage] = useState(null);
   const activeChatRef = useRef(null);
 
   useEffect(() => {
@@ -379,6 +383,20 @@ function App() {
       ));
     });
 
+    socketRef.current.on('typing_start', ({ senderId }) => {
+      setTypingUsers(prev => ({ ...prev, [senderId]: true }));
+      // Auto clear after 3 seconds if stop doesn't arrive
+      if (typingTimeoutRef.current[senderId]) clearTimeout(typingTimeoutRef.current[senderId]);
+      typingTimeoutRef.current[senderId] = setTimeout(() => {
+        setTypingUsers(prev => ({ ...prev, [senderId]: false }));
+      }, 3000);
+    });
+
+    socketRef.current.on('typing_stop', ({ senderId }) => {
+      setTypingUsers(prev => ({ ...prev, [senderId]: false }));
+      if (typingTimeoutRef.current[senderId]) clearTimeout(typingTimeoutRef.current[senderId]);
+    });
+
     socketRef.current.emit('request_statuses');
 
     return () => socketRef.current.disconnect();
@@ -449,6 +467,10 @@ function App() {
     if (blockedUsers.includes(activeChat.id)) {
       alert('Has bloqueado a este usuario. Desbloquéalo para enviar mensajes.');
       return;
+    }
+
+    if (activeChat.id !== 'global') {
+      socketRef.current.emit('typing_stop', { senderId: userId, receiverId: activeChat.id });
     }
 
     const newMessage = {
@@ -1093,8 +1115,8 @@ function App() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500 }}>{activeChat.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>
-                    {activeChat.id === 'global' ? 'Chat Público' : 'Chat Privado'}
+                  <div style={{ fontSize: 13, color: typingUsers[activeChat.id] ? '#00a884' : 'var(--wa-text-secondary)', transition: 'color 0.2s', fontWeight: typingUsers[activeChat.id] ? 500 : 400 }}>
+                    {typingUsers[activeChat.id] ? 'escribiendo...' : (activeChat.id === 'global' ? 'Chat Público' : 'Chat Privado')}
                   </div>
                 </div>
               </div>
@@ -1142,7 +1164,7 @@ function App() {
                             maxHeight: '300px',
                             cursor: 'pointer'
                           }}
-                          onClick={() => window.open(`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`, '_blank')}
+                          onClick={() => setFullscreenImage(`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`)}
                         />
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
                           {msg.file_info.name} ({(msg.file_info.size / (1024 * 1024)).toFixed(2)} MB)
@@ -1179,7 +1201,7 @@ function App() {
 
                     <div className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {msg.sender_id === userId && <CheckCheck size={14} style={{ marginLeft: 4, verticalAlign: 'middle', color: msg.read ? '#53bdeb' : '#ef5350' }} />}
+                      {msg.sender_id === userId && <CheckCheck size={14} className={`message-checkmark ${msg.read ? 'animate-read' : ''}`} style={{ marginLeft: 4, verticalAlign: 'middle', color: msg.read ? '#53bdeb' : '#ef5350' }} />}
                     </div>
                   </div>
                 ))}
@@ -1605,6 +1627,25 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {fullscreenImage && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex',
+          justifyContent: 'center', alignItems: 'center'
+        }}>
+          <button
+            onClick={() => setFullscreenImage(null)}
+            style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+            <X size={32} />
+          </button>
+          <img
+            src={fullscreenImage}
+            alt="Fullscreen preview"
+            style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }}
+          />
         </div>
       )}
     </div>
