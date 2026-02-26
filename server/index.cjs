@@ -326,23 +326,29 @@ io.on('connection', (socket) => {
     // ==========================================
     socket.on('send_message', async (data) => {
         try {
-            if (!data?.senderId) return;
+            const senderId = data.senderId || data.sender_id;
+            if (!senderId) return;
             const msgId = data.id || uuidv4();
+            const receiverId = data.receiverId || data.receiver_id || 'global';
+
             const msg = {
-                sender_id: data.senderId,
-                receiver_id: data.receiverId || 'global',
+                sender_id: senderId,
+                receiver_id: receiverId,
                 content: data.content || '',
-                message_type: data.message_type || 'text',
-                file_name: data.file_name || '',
-                file_url: data.file_url || ''
+                message_type: data.message_type || data.type || 'text',
+                file_name: data.file_name || data?.file_info?.name || '',
+                file_url: data.file_url || data?.file_info?.path || ''
             };
             firestore.saveMessage(msgId, msg).catch(() => { });
-            const emit = { id: msgId, ...msg, timestamp: new Date().toISOString() };
+            const emit = { id: msgId, ...msg, timestamp: new Date().toISOString(), type: msg.message_type, file_info: data.file_info };
+
             if (msg.receiver_id === 'global') {
                 io.emit('receive_message', emit);
             } else {
+                // Emite al que envía para que se actualice si tiene múltiples clientes
                 socket.emit('receive_message', emit);
-                io.to(msg.receiver_id).emit('receive_message', emit);
+                // Emite al que recibe
+                io.to(receiverId).emit('receive_message', emit);
             }
         } catch (e) {
             console.error('[Chat]', e.message);
@@ -367,11 +373,14 @@ io.on('connection', (socket) => {
 
     socket.on('search_user', (data) => {
         try {
+            console.log(`[Search] Intentando buscar número:`, data);
             const phone = data?.phoneNumber;
             if (!phone) { socket.emit('user_found', null); return; }
             const found = Array.from(usersMap.values()).find(u => u.phone_number === phone);
+            console.log(`[Search] Resultado para ${phone}:`, found ? found.username : 'No encontrado');
             socket.emit('user_found', found || null);
         } catch (e) {
+            console.error('[Search] Error:', e);
             socket.emit('user_found', null);
         }
     });
@@ -382,14 +391,17 @@ io.on('connection', (socket) => {
     socket.on('publish_status', async (data) => {
         try {
             const id = uuidv4();
+            const statusOwner = data.userId || data.user_id;
             await firestore.saveStatus(id, {
-                user_id: data.userId,
+                user_id: statusOwner,
                 content: data.content || '',
                 media_url: data.media_url || '',
                 type: data.type || 'text'
             });
             const all = await firestore.getStatuses();
             io.emit('status_update', all);
+            // También enviarlo por status_list para asegurar compatibilidad
+            io.emit('status_list', all);
         } catch (e) {
             console.error('[Status]', e.message);
         }

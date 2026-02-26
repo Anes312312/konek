@@ -134,6 +134,11 @@ function App() {
 
 
   useEffect(() => {
+    // Solicitar permiso de notificaciones
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+
     socketRef.current = io(SERVER_URL);
 
     socketRef.current.emit('join', { userId, profile });
@@ -142,7 +147,14 @@ function App() {
       // Ignorar mensajes de usuarios bloqueados (usando Ref para evitar cierres obsoletos)
       if (blockedUsersRef.current.includes(message.sender_id)) return;
 
-      setMessages((prev) => [...prev, message]);
+      // Importante: No la agregamos de nuevo si somos nosotros mismos y ya está por el setMessages local
+      // (ya que el servidor ahora emite también al enviador), pero por simplicidad el React prev filter 
+      // lo puede manejar, o comprobamos id.
+      setMessages((prev) => {
+        // Evitar duplicados por id
+        if (prev.some(m => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
 
       // Incrementar contador de no leídos si no es el chat activo
       if (message.sender_id !== userId && (!activeChatRef.current || activeChatRef.current.id !== message.sender_id)) {
@@ -150,6 +162,18 @@ function App() {
           ...prev,
           [message.sender_id]: (prev[message.sender_id] || 0) + 1
         }));
+
+        // Notificación estilo WhatsApp si el navegador lo soporta
+        if ('Notification' in window && Notification.permission === 'granted') {
+          // Buscamos el nombre del usuario si es posible
+          const contactName = message.sender_name || 'Nuevo mensaje';
+          let bodyText = message.content;
+          if (message.type === 'image') bodyText = '📸 Imagen';
+          else if (message.type === 'audio') bodyText = '🎵 Audio';
+          else if (message.type === 'file') bodyText = '📄 Archivo';
+
+          new Notification(contactName, { body: bodyText });
+        }
       }
 
       // Si el remitente no está en nuestros contactos, añadirlo automáticamente
