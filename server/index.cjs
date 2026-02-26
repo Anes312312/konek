@@ -377,6 +377,20 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('mark_read', ({ readerId, senderId }) => {
+        try {
+            if (!readerId || !senderId) return;
+            // Update in memory messages
+            messagesList.forEach(m => {
+                if (m.sender_id === senderId && m.receiver_id === readerId) {
+                    m.read = true;
+                }
+            });
+            // Emit to sender
+            io.to(senderId).emit('messages_read', { contactId: readerId });
+        } catch (e) { console.error('[mark_read]', e.message); }
+    });
+
     socket.on('request_history', async (data) => {
         try {
             const { userId, contactId } = data || {};

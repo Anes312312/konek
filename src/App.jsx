@@ -241,6 +241,8 @@ function App() {
             new Notification(contactName, { body: bodyText, vibrate: [200, 100, 200] });
           }
         }
+      } else if (message.sender_id !== userId && activeChatRef.current && activeChatRef.current.id === message.sender_id) {
+        socketRef.current.emit('mark_read', { readerId: userId, senderId: message.sender_id });
       }
 
       // Si el remitente no está en nuestros contactos, añadirlo automáticamente
@@ -371,6 +373,12 @@ function App() {
       window.location.reload();
     });
 
+    socketRef.current.on('messages_read', ({ contactId }) => {
+      setMessages(prev => prev.map(msg =>
+        (msg.receiver_id === contactId && msg.sender_id === userId) ? { ...msg, read: true } : msg
+      ));
+    });
+
     socketRef.current.emit('request_statuses');
 
     return () => socketRef.current.disconnect();
@@ -429,6 +437,7 @@ function App() {
         socketRef.current.emit('request_history', { userId, contactId: 'global' });
       } else {
         socketRef.current.emit('request_history', { userId, contactId: activeChat.id });
+        socketRef.current.emit('mark_read', { readerId: userId, senderId: activeChat.id });
       }
     }
   }, [activeChat, userId]);
@@ -785,7 +794,6 @@ function App() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="icon-btn" onClick={() => setShowProfileModal(true)}><Settings size={20} /></button>
-            <button className="icon-btn"><MoreVertical size={20} /></button>
           </div>
         </div>
 
@@ -1171,7 +1179,7 @@ function App() {
 
                     <div className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {msg.sender_id === userId && <CheckCheck size={14} style={{ marginLeft: 4, verticalAlign: 'middle', color: '#53bdeb' }} />}
+                      {msg.sender_id === userId && <CheckCheck size={14} style={{ marginLeft: 4, verticalAlign: 'middle', color: msg.read ? '#53bdeb' : '#ef5350' }} />}
                     </div>
                   </div>
                 ))}
@@ -1519,25 +1527,25 @@ function App() {
 
           <button
             className="icon-btn"
-            style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 50, height: 50 }}
+            style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 36, height: 36, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             onClick={(e) => {
               e.stopPropagation();
               if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
             }}
           >
-            <ChevronLeft size={30} color="white" />
+            <ChevronLeft size={22} color="white" />
           </button>
 
           <button
             className="icon-btn"
-            style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 50, height: 50 }}
+            style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 36, height: 36, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             onClick={(e) => {
               e.stopPropagation();
               if (currentIdx < viewingGroup.items.length - 1) setCurrentIdx(prev => prev + 1);
               else setViewingGroup(null);
             }}
           >
-            <ChevronRight size={30} color="white" />
+            <ChevronRight size={22} color="white" />
           </button>
 
           <div className="status-viewer-progress">
