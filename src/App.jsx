@@ -248,9 +248,21 @@ function App() {
     });
 
     socketRef.current.on('login_success', (userData) => {
-      setProfile(prev => ({ ...prev, role: userData.role, number: userData.phone_number || '' }));
-      // Si el servidor dice que ya tiene nombre real y no es el default, quitamos onboarding
-      if (userData.username && userData.username !== 'Mi Usuario') {
+      setProfile(prev => {
+        const serverName = userData.username;
+        const hasRealServerName = serverName && serverName !== 'Mi Usuario' && serverName !== 'Usuario';
+        const hasRealLocalName = prev.name && prev.name !== 'Mi Usuario' && prev.name !== 'Usuario';
+        return {
+          ...prev,
+          // Si el servidor tiene un nombre real, usarlo (prioridad al servidor)
+          // Si no, mantener el nombre local si es real
+          name: hasRealServerName ? serverName : (hasRealLocalName ? prev.name : prev.name),
+          role: userData.role,
+          number: userData.phone_number || prev.number
+        };
+      });
+      // Si el servidor dice que ya tiene nombre real, quitamos onboarding
+      if (userData.username && userData.username !== 'Mi Usuario' && userData.username !== 'Usuario') {
         localStorage.setItem('konek_setup_done', 'true');
         setShowOnboarding(false);
       }

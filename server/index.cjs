@@ -128,8 +128,8 @@ app.get('/api/admin/cleanup-all', async (req, res) => {
 });
 
 // SPA fallback (AL FINAL)
-app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) return;
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
@@ -252,7 +252,13 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            const username = (profile.name || 'Usuario').trim();
+            const existing = usersMap.get(userId);
+            // Si el usuario ya existe y tiene un nombre real, preservarlo salvo que envíe uno nuevo distinto al default
+            const incomingName = (profile.name || '').trim();
+            const isDefaultName = !incomingName || incomingName === 'Mi Usuario' || incomingName === 'Usuario';
+            const username = (isDefaultName && existing?.username && existing.username !== 'Usuario' && existing.username !== 'Mi Usuario')
+                ? existing.username
+                : (incomingName || existing?.username || 'Usuario');
             const phoneNumber = profile.number ? String(profile.number).trim() : '';
 
             // Verificar eliminado
@@ -285,7 +291,7 @@ io.on('connection', (socket) => {
             socket.join(userId);
             onlineUsers.add(userId);
 
-            const existing = usersMap.get(userId);
+            // existing ya fue definido arriba
             const userData = {
                 id: userId,
                 username: username,
@@ -412,20 +418,27 @@ io.on('connection', (socket) => {
     socket.on('update_profile', async (data) => {
         try {
             if (!data?.userId) return;
+            // El cliente envía { userId, profile: { name, photo, description, number } }
+            // Soportamos ambos formatos: data.profile.X o data.X
+            const p = data.profile || data;
             const user = usersMap.get(data.userId);
+            const profileName = p.name ? p.name.trim() : '';
             if (user) {
-                if (data.name) user.username = data.name;
-                if (data.photo !== undefined) user.profile_pic = data.photo;
-                if (data.description !== undefined) user.status = data.description;
-                if (data.number !== undefined) user.phone_number = data.number;
+                if (profileName) user.username = profileName;
+                if (p.photo !== undefined) user.profile_pic = p.photo;
+                if (p.description !== undefined) user.status = p.description;
+                if (p.number !== undefined) user.phone_number = String(p.number);
                 usersMap.set(data.userId, user);
             }
-            firestore.saveUser(data.userId, {
-                username: data.name || '',
-                profile_pic: data.photo || '',
-                status: data.description || '',
-                phone_number: data.number || ''
-            }).catch(() => { });
+            // Solo guardar campos que tengan valor real, no sobrescribir con vacío
+            const saveData = {};
+            if (profileName) saveData.username = profileName;
+            else if (user?.username) saveData.username = user.username;
+            saveData.profile_pic = p.photo !== undefined ? (p.photo || '') : (user?.profile_pic || '');
+            saveData.status = p.description !== undefined ? p.description : (user?.status || '');
+            saveData.phone_number = p.number !== undefined ? String(p.number) : (user?.phone_number || '');
+            firestore.saveUser(data.userId, saveData).catch(() => { });
+            console.log(`[Profile] ✓ ${saveData.username || 'sin nombre'} actualizado`);
             socket.emit('profile_updated', { success: true });
             broadcastUserList();
         } catch (e) { }
