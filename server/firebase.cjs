@@ -184,6 +184,32 @@ const firestore = {
         }
     },
 
+    async markMessagesRead(senderId, receiverId) {
+        if (!db) return;
+        try {
+            const snap = await db.collection('messages')
+                .where('sender_id', '==', senderId)
+                .where('receiver_id', '==', receiverId)
+                .get();
+            if (!snap.empty) {
+                const batch = db.batch();
+                let count = 0;
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.read) {
+                        batch.update(doc.ref, { read: true });
+                        count++;
+                    }
+                });
+                if (count > 0) {
+                    await batch.commit();
+                }
+            }
+        } catch (e) {
+            console.error('[Firestore] markMessagesRead error:', e.message);
+        }
+    },
+
     // ----- ESTADOS -----
     async getStatuses() {
         if (!db) return [];

@@ -344,11 +344,13 @@ io.on('connection', (socket) => {
                 content: data.content || '',
                 message_type: data.message_type || data.type || 'text',
                 file_name: data.file_name || data?.file_info?.name || '',
-                file_url: data.file_url || data?.file_info?.path || ''
+                file_url: data.file_url || data?.file_info?.path || '',
+                read: false
             };
             firestore.saveMessage(msgId, msg).catch(() => { });
             const emit = {
                 id: msgId,
+                read: false,
                 ...msg,
                 timestamp: new Date().toISOString(),
                 type: msg.message_type,
@@ -386,6 +388,8 @@ io.on('connection', (socket) => {
                     m.read = true;
                 }
             });
+            // Update firestore 
+            firestore.markMessagesRead(senderId, readerId).catch(() => { });
             // Emit to sender
             io.to(senderId).emit('messages_read', { contactId: readerId });
         } catch (e) { console.error('[mark_read]', e.message); }
