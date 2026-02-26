@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot } from 'lucide-react';
+import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw } from 'lucide-react';
 
 const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? `${window.location.protocol}//${window.location.hostname}:5000`
@@ -11,18 +11,9 @@ function AdminDashboard() {
     const [onlineCount, setOnlineCount] = useState(0);
     const [adminEditingUser, setAdminEditingUser] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const socketRef = useRef();
-
-    // Usar el mismo ID del usuario principal del chat
-    const [adminId] = useState(() => {
-        const existing = localStorage.getItem('konek_userId');
-        if (existing) return existing;
-        // Si no hay ID, crear uno nuevo para admin
-        const newId = 'admin_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('konek_userId', newId);
-        return newId;
-    });
 
     useEffect(() => {
         socketRef.current = io(SERVER_URL);
@@ -30,14 +21,23 @@ function AdminDashboard() {
         socketRef.current.on('connect', () => {
             console.log('[Admin] Socket conectado');
             setIsConnected(true);
+            // Autenticarse como admin (NO como usuario del chat)
+            socketRef.current.emit('admin_login', { key: 'konek_admin_2024' });
         });
 
         socketRef.current.on('disconnect', () => {
-            console.log('[Admin] Socket desconectado');
             setIsConnected(false);
+            setIsAuthenticated(false);
         });
 
-        // --- LISTENERS ---
+        // Admin autenticado exitosamente
+        socketRef.current.on('admin_authenticated', () => {
+            console.log('[Admin] Autenticado correctamente');
+            setIsAuthenticated(true);
+            setErrorMsg('');
+        });
+
+        // Lista de usuarios
         socketRef.current.on('admin_user_list', (users) => {
             console.log('[Admin] Lista recibida:', users.length, 'usuarios');
             setAdminUsers(users);
@@ -48,88 +48,43 @@ function AdminDashboard() {
             setOnlineCount(count);
         });
 
-        socketRef.current.on('login_success', (userData) => {
-            console.log('[Admin] Login exitoso:', userData.username, 'rol:', userData.role);
-            if (userData.role !== 'admin') {
-                setErrorMsg('Tu cuenta no tiene permisos de administrador.');
-                return;
-            }
-            // Pedir lista de usuarios tras login exitoso
-            socketRef.current.emit('admin_get_all_users', adminId);
-        });
-
-        socketRef.current.on('user_list', (users) => {
-            // También escuchar user_list como fallback
-            console.log('[Admin] user_list recibida:', users.length);
-            if (adminUsers.length === 0) {
-                setAdminUsers(users);
-            }
-        });
-
         socketRef.current.on('error', (err) => {
             console.error('[Admin] Error:', err);
             setErrorMsg(err.message || 'Error desconocido');
         });
 
-        // --- Unirse como Admin ---
-        // Obtener el perfil guardado para no sobrescribir datos existentes
-        let savedProfile = { name: 'Admin', photo: '', description: 'Dashboard Administrativo' };
-        try {
-            const stored = localStorage.getItem('konek_profile');
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                // Mantener el nombre como Admin para asegurar el rol
-                savedProfile = {
-                    name: 'Admin',
-                    photo: parsed.photo || '',
-                    description: parsed.description || 'Dashboard Administrativo',
-                    number: parsed.number || ''
-                };
-            }
-        } catch (e) { /* ignore */ }
-
-        socketRef.current.emit('join', {
-            userId: adminId,
-            profile: savedProfile
-        });
-
         return () => socketRef.current.disconnect();
-    }, [adminId]);
+    }, []);
 
     const refreshUserList = () => {
         if (socketRef.current) {
-            console.log('[Admin] Solicitando lista manualmente...');
-            socketRef.current.emit('admin_get_all_users', adminId);
+            socketRef.current.emit('admin_get_all_users');
         }
     };
 
     const adminCreateUser = () => {
         const name = prompt('Nombre del nuevo usuario:');
         if (!name) return;
-        const number = prompt('Número de identificación:');
-        if (!number) return;
+        const number = prompt('Número de teléfono:');
 
-        const newUser = {
-            id: 'user_' + Math.random().toString(36).substr(2, 9),
+        socketRef.current.emit('admin_create_user', {
             username: name,
-            phone_number: number,
+            phone_number: number || '',
             role: 'user'
-        };
-        socketRef.current.emit('admin_create_user', { adminId, newUser });
+        });
     };
 
     const adminDeleteUser = (targetId) => {
-        if (targetId === adminId) {
-            alert('No puedes eliminar tu propia cuenta de administrador.');
-            return;
-        }
-        if (window.confirm('¿ELIMINAR este usuario y todos sus datos permanentemente?')) {
-            socketRef.current.emit('admin_delete_user', { adminId, userId: targetId });
+        if (window.confirm('¿ELIMINAR este usuario permanentemente?')) {
+            socketRef.current.emit('admin_delete_user', { userId: targetId });
         }
     };
 
     const adminUpdateUser = (targetUser, updates) => {
-        socketRef.current.emit('admin_update_user', { adminId, userId: targetUser.id, update: updates });
+        socketRef.current.emit('admin_update_user', {
+            userId: targetUser.id,
+            update: updates
+        });
         setAdminEditingUser(null);
     };
 
@@ -140,11 +95,9 @@ function AdminDashboard() {
                     <ShieldCheck size={32} color="#00a884" />
                     <span>Konek Fun Admin</span>
                 </div>
-                <div style={{ flex: 1 }}>
-                    <div style={{ padding: '10px 16px', fontSize: 11, color: '#8696a0' }}>
-                        ID: {adminId.substring(0, 12)}...
-                        <br />
-                        Estado: {isConnected ? '🟢 Conectado' : '🔴 Desconectado'}
+                <div style={{ flex: 1, padding: '10px 16px' }}>
+                    <div style={{ fontSize: 11, color: '#8696a0' }}>
+                        Estado: {isConnected ? (isAuthenticated ? '🟢 Autenticado' : '🟡 Conectando...') : '🔴 Desconectado'}
                     </div>
                 </div>
                 <button className="admin-logout" onClick={() => window.location.href = '/'}>
@@ -158,10 +111,10 @@ function AdminDashboard() {
                         <h1>Panel de Administración</h1>
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <button className="admin-refresh-btn" onClick={refreshUserList}>
-                                <CircleDot size={20} /> Actualizar Lista
+                                <RefreshCw size={18} /> Actualizar
                             </button>
                             <button className="admin-add-btn" onClick={adminCreateUser}>
-                                <UserPlus size={20} /> Crear Nuevo Usuario
+                                <UserPlus size={18} /> Crear Usuario
                             </button>
                         </div>
                     </header>
@@ -173,8 +126,7 @@ function AdminDashboard() {
                             border: '1px solid rgba(239, 68, 68, 0.3)',
                             borderRadius: '8px',
                             color: '#ef4444',
-                            margin: '0 0 20px 0',
-                            fontSize: '14px'
+                            margin: '0 0 20px 0'
                         }}>
                             ⚠️ {errorMsg}
                         </div>
@@ -190,9 +142,9 @@ function AdminDashboard() {
                             <span className="value">{onlineCount}</span>
                         </div>
                         <div className="metric-card">
-                            <span className="label">Estado del Sistema</span>
-                            <span className="value" style={{ fontSize: '18px', color: isConnected ? '#00a884' : '#ef4444' }}>
-                                {isConnected ? 'Operacional' : 'Sin conexión'}
+                            <span className="label">Estado</span>
+                            <span className="value" style={{ fontSize: '18px', color: isAuthenticated ? '#00a884' : '#ef4444' }}>
+                                {isAuthenticated ? 'Operacional' : 'Sin acceso'}
                             </span>
                         </div>
                     </div>
@@ -205,7 +157,7 @@ function AdminDashboard() {
                             <thead>
                                 <tr>
                                     <th>Usuario</th>
-                                    <th>ID Identificación</th>
+                                    <th>Teléfono</th>
                                     <th>Rol</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -215,8 +167,8 @@ function AdminDashboard() {
                                 {adminUsers.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#8696a0' }}>
-                                            {isConnected
-                                                ? 'No se encontraron usuarios registrados. Haz clic en "Actualizar Lista" para reintentar.'
+                                            {isAuthenticated
+                                                ? 'No hay usuarios registrados aún.'
                                                 : 'Conectando al servidor...'}
                                         </td>
                                     </tr>
@@ -226,7 +178,7 @@ function AdminDashboard() {
                                             <td>
                                                 <div className="table-user-info">
                                                     <div className="avatar-sm">
-                                                        {u.profile_pic && u.profile_pic.length > 0 ? (
+                                                        {u.profile_pic ? (
                                                             <img src={u.profile_pic} alt={u.username} />
                                                         ) : (
                                                             <User size={16} color="#8696a0" />
@@ -236,7 +188,7 @@ function AdminDashboard() {
                                                 </div>
                                             </td>
                                             <td><code className="id-badge">{u.phone_number || '---'}</code></td>
-                                            <td><span className={`role-badge ${u.role}`}>{u.role?.toUpperCase()}</span></td>
+                                            <td><span className={`role-badge ${u.role}`}>{(u.role || 'user').toUpperCase()}</span></td>
                                             <td>
                                                 <span className={`status-pill ${u.isOnline ? 'online' : 'offline'}`}>
                                                     {u.isOnline ? 'Online' : 'Offline'}
@@ -244,14 +196,12 @@ function AdminDashboard() {
                                             </td>
                                             <td>
                                                 <div className="action-btns">
-                                                    <button className="edit-btn" title="Editar" onClick={() => setAdminEditingUser(u)}>
+                                                    <button className="edit-btn" title="Editar" onClick={() => setAdminEditingUser({ ...u })}>
                                                         <Settings size={18} />
                                                     </button>
-                                                    {u.id !== adminId && (
-                                                        <button className="delete-btn" title="Eliminar" onClick={() => adminDeleteUser(u.id)}>
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    )}
+                                                    <button className="delete-btn" title="Eliminar" onClick={() => adminDeleteUser(u.id)}>
+                                                        <Trash2 size={18} />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -276,7 +226,7 @@ function AdminDashboard() {
                             />
                         </div>
                         <div className="admin-form-group">
-                            <label>ID Identificación</label>
+                            <label>Teléfono</label>
                             <input
                                 type="text"
                                 value={adminEditingUser.phone_number || ''}
@@ -286,11 +236,10 @@ function AdminDashboard() {
                         <div className="admin-form-group">
                             <label>Rol</label>
                             <select
-                                value={adminEditingUser.role}
+                                value={adminEditingUser.role || 'user'}
                                 onChange={e => setAdminEditingUser({ ...adminEditingUser, role: e.target.value })}
                             >
                                 <option value="user">USER</option>
-                                <option value="admin">ADMIN</option>
                             </select>
                         </div>
                         <div className="admin-modal-actions">
@@ -299,7 +248,7 @@ function AdminDashboard() {
                                 username: adminEditingUser.username,
                                 phone_number: adminEditingUser.phone_number,
                                 role: adminEditingUser.role
-                            })}>Guardar Cambios</button>
+                            })}>Guardar</button>
                         </div>
                     </div>
                 </div>
