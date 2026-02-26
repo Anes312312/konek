@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDashed, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDashed, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 // Eliminamos la librería que daba problemas y usamos un set de emojis estándar y seguro
