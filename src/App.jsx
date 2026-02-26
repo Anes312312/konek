@@ -601,14 +601,14 @@ function App() {
   const startNewChat = (e) => {
     e.preventDefault();
     if (!searchNumber.trim()) return;
-    socketRef.current.emit('find_user_by_number', searchNumber);
+    socketRef.current.emit('search_user', { phoneNumber: searchNumber.trim() });
   };
 
   const handleLinkNumber = () => {
     const num = prompt("Introduce el número de identificación proporcionado por el Admin:");
     if (num) {
       setIsLinking(true);
-      socketRef.current.emit('find_user_by_number', num);
+      socketRef.current.emit('search_user', { phoneNumber: num.trim() });
     }
   };
 
