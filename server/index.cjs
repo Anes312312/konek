@@ -129,6 +129,11 @@ app.get('/api/admin/cleanup-all', async (req, res) => {
     }
 });
 
+// Keep-alive (Ping) endpoint para evitar que Render se duerma
+app.get('/api/ping', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
 // SPA fallback (AL FINAL)
 app.use((req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) return next();
