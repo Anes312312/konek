@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 // Eliminamos la librería que daba problemas y usamos un set de emojis estándar y seguro
@@ -133,6 +133,20 @@ function App() {
     blockedUsersRef.current = blockedUsers;
   }, [blockedUsers]);
 
+
+  useEffect(() => {
+    let timer;
+    if (viewingGroup) {
+      timer = setTimeout(() => {
+        if (currentIdx < viewingGroup.items.length - 1) {
+          setCurrentIdx(prev => prev + 1);
+        } else {
+          setViewingGroup(null);
+        }
+      }, 5000);
+    }
+    return () => clearTimeout(timer);
+  }, [viewingGroup, currentIdx]);
 
   useEffect(() => {
     // Solicitar permiso de notificaciones
@@ -544,16 +558,28 @@ function App() {
   };
 
   const deleteChat = (userIdToDelete) => {
-    if (window.confirm('¿Estás seguro de que deseas borrar este chat? Se eliminará la lista de mensajes localmente.')) {
-      // Eliminar de los contactos disponibles
-      setAvailableUsers(prev => prev.filter(u => u.id !== userIdToDelete));
-      // Limpiar los mensajes de este chat específico
+    if (window.confirm('¿Estás seguro de que deseas vaciar este chat? Se eliminará la lista de mensajes localmente.')) {
       setMessages(prev => prev.filter(msg =>
         !((msg.sender_id === userId && msg.receiver_id === userIdToDelete) ||
           (msg.sender_id === userIdToDelete && msg.receiver_id === userId))
       ));
-      setActiveChat(null);
+      if (activeChat?.id === userIdToDelete) {
+        setActiveChat(null);
+      }
       setShowChatMenu(false);
+    }
+  };
+
+  const deleteContact = (userIdToDelete) => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este contacto? Se vaciará el chat.')) {
+      setAvailableUsers(prev => prev.filter(u => u.id !== userIdToDelete));
+      setMessages(prev => prev.filter(msg =>
+        !((msg.sender_id === userId && msg.receiver_id === userIdToDelete) ||
+          (msg.sender_id === userIdToDelete && msg.receiver_id === userId))
+      ));
+      if (activeChat?.id === userIdToDelete) {
+        setActiveChat(null);
+      }
     }
   };
 
@@ -756,22 +782,32 @@ function App() {
                       <div style={{ fontSize: 13, color: 'var(--wa-text-secondary)' }}>
                         #{user.phone_number}
                       </div>
-                      {unreadCounts[user.id] > 0 && (
-                        <div style={{
-                          background: '#25d366',
-                          color: '#111b21',
-                          borderRadius: '50%',
-                          width: 20,
-                          height: 20,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 11,
-                          fontWeight: 700
-                        }}>
-                          {unreadCounts[user.id]}
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {unreadCounts[user.id] > 0 && (
+                          <div style={{
+                            background: '#25d366',
+                            color: '#111b21',
+                            borderRadius: '50%',
+                            width: 20,
+                            height: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 11,
+                            fontWeight: 700
+                          }}>
+                            {unreadCounts[user.id]}
+                          </div>
+                        )}
+                        <button
+                          className="icon-btn"
+                          style={{ padding: '4px', width: 'auto', height: 'auto', opacity: 0.8 }}
+                          onClick={(e) => { e.stopPropagation(); deleteContact(user.id); }}
+                          title="Eliminar contacto"
+                        >
+                          <Trash2 size={16} color="#ef4444" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1365,14 +1401,44 @@ function App() {
       {/* Visor de Estados */}
       {viewingGroup && (
         <div className="status-viewer-overlay">
+          <style>{`
+            @keyframes fill-progress {
+              0% { width: 0%; }
+              100% { width: 100%; }
+            }
+          `}</style>
+
+          <button
+            className="icon-btn"
+            style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 50, height: 50 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
+            }}
+          >
+            <ChevronLeft size={30} color="white" />
+          </button>
+
+          <button
+            className="icon-btn"
+            style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', zIndex: 10, borderRadius: '50%', width: 50, height: 50 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (currentIdx < viewingGroup.items.length - 1) setCurrentIdx(prev => prev + 1);
+              else setViewingGroup(null);
+            }}
+          >
+            <ChevronRight size={30} color="white" />
+          </button>
+
           <div className="status-viewer-progress">
             {viewingGroup.items.map((item, idx) => (
               <div key={item.id} className="progress-bar-bg">
                 <div
                   className="progress-bar-fill"
                   style={{
-                    width: idx < currentIdx ? '100%' : idx === currentIdx ? '100%' : '0%',
-                    transition: idx === currentIdx ? 'width 5s linear' : 'none'
+                    width: idx < currentIdx ? '100%' : '0%',
+                    animation: idx === currentIdx ? 'fill-progress 5s linear forwards' : 'none'
                   }}
                 />
               </div>
@@ -1386,7 +1452,9 @@ function App() {
               </div>
               <div style={{ marginLeft: 10 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{viewingGroup.username}</div>
-                <div style={{ fontSize: 11, opacity: 0.8 }}>{new Date(viewingGroup.items[currentIdx].timestamp).toLocaleString()}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>
+                  {viewingGroup.items[currentIdx]?.timestamp ? new Date(viewingGroup.items[currentIdx].timestamp).toLocaleString() : 'Recientemente'}
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
