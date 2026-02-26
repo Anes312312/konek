@@ -1161,6 +1161,7 @@ body {
 
   .app-container.chat-active .chat-window {
     display: flex;
+    flex-direction: column;
   }
 
   .mobile-back-btn {
