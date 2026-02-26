@@ -181,6 +181,12 @@ function App() {
       // Ignorar mensajes de usuarios bloqueados (usando Ref para evitar cierres obsoletos)
       if (blockedUsersRef.current.includes(message.sender_id)) return;
 
+      // Reproducir sonido de notificación
+      if (message.sender_id !== userId) {
+        const audio = new Audio('/ringtone.mp3');
+        audio.play().catch(e => console.log('Autoplay prevent or audio error:', e));
+      }
+
       // Importante: No la agregamos de nuevo si somos nosotros mismos y ya está por el setMessages local
       // (ya que el servidor ahora emite también al enviador), pero por simplicidad el React prev filter 
       // lo puede manejar, o comprobamos id.
@@ -730,15 +736,25 @@ function App() {
       {/* Barra Lateral */}
       <div className="sidebar">
         <div className="sidebar-header">
-          <div
-            className="avatar"
-            onClick={() => setShowProfileModal(true)}
-            style={{
-              width: 40, height: 40, background: '#6a7175', borderRadius: '50%', cursor: 'pointer',
-              overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}
-          >
-            {profile.photo ? <img src={profile.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" size={20} />}
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+            <div
+              className="avatar"
+              onClick={() => setShowProfileModal(true)}
+              style={{
+                width: 40, height: 40, background: '#6a7175', borderRadius: '50%', cursor: 'pointer',
+                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}
+            >
+              {profile.photo ? <img src={profile.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" size={20} />}
+            </div>
+            <div
+              style={{ marginLeft: 12, display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+              onClick={() => setShowProfileModal(true)}
+            >
+              <span style={{ fontSize: 13, color: 'var(--wa-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {profile.description || '¡Hola! Estoy usando Konek Fun.'}
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="icon-btn" onClick={() => setShowProfileModal(true)}><Settings size={20} /></button>
