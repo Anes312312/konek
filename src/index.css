@@ -327,6 +327,7 @@ body {
 .modal-content {
   background: var(--wa-panel-bg);
   width: 400px;
+  max-width: 90vw;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
@@ -1132,5 +1133,46 @@ body {
 
   100% {
     opacity: 1;
+  }
+}
+
+/* Mobile Responsiveness */
+.mobile-back-btn {
+  display: none !important;
+  margin-right: 8px;
+  padding: 4px;
+}
+
+@media screen and (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .app-container.chat-active .sidebar {
+    display: none;
+  }
+
+  .chat-window {
+    display: none;
+    width: 100%;
+  }
+
+  .app-container.chat-active .chat-window {
+    display: flex;
+  }
+
+  .mobile-back-btn {
+    display: flex !important;
+  }
+
+  .chat-placeholder {
+    display: none;
+  }
+
+  .emoji-picker {
+    width: 90vw;
+    left: 5vw;
   }
 }

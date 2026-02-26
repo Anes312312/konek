@@ -697,7 +697,7 @@ function App() {
   }, [userId, isLinking]);
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${activeChat ? 'chat-active' : ''}`}>
       {/* Barra Lateral */}
       <div className="sidebar">
         <div className="sidebar-header">
@@ -969,6 +969,15 @@ function App() {
                   }
                 }}
               >
+                <button
+                  className="icon-btn mobile-back-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveChat(null);
+                  }}
+                >
+                  <ChevronLeft size={24} color="white" />
+                </button>
                 <div className="avatar" style={{ width: 40, height: 40, background: '#00a884', borderRadius: '50%', marginRight: 12, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {availableUsers.find(u => u.id === activeChat.id)?.profile_pic ? (
                     <img src={availableUsers.find(u => u.id === activeChat.id).profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
