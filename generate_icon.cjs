@@ -48,26 +48,31 @@ const svgCode = `
 `;
 
 async function generateAppIcons() {
-    fs.writeFileSync('icon.svg', svgCode);
+  fs.writeFileSync('icon.svg', svgCode);
 
-    await sharp('icon.svg')
-        .resize(512, 512)
-        .png()
-        .toFile('public/icon-512.png');
+  await sharp('icon.svg')
+    .resize(512, 512)
+    .png()
+    .toFile('public/icon-512.png');
 
-    await sharp('icon.svg')
-        .resize(192, 192)
-        .png()
-        .toFile('public/icon-192.png');
+  await sharp('icon.svg')
+    .resize(192, 192)
+    .png()
+    .toFile('public/icon-192.png');
 
-    // Generar uno "invisible" por si acaso, para ocultar el splash si se quiere
-    await sharp({
-        create: {
-            width: 512, height: 512, channels: 4, background: '#0b1120'
-        }
-    }).png().toFile('public/splash-solid-512.png');
+  await sharp('icon.svg')
+    .resize(32, 32)
+    .png()
+    .toFile('public/favicon.png');
 
-    console.log("Modern SVG app icons generated successfully!");
+  // Generar uno "invisible" por si acaso, para ocultar el splash si se quiere
+  await sharp({
+    create: {
+      width: 512, height: 512, channels: 4, background: '#0b1120'
+    }
+  }).png().toFile('public/splash-solid-512.png');
+
+  console.log("Modern SVG app icons generated successfully!");
 }
 
 generateAppIcons().catch(console.error);
