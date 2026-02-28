@@ -9,7 +9,7 @@
     "orientation": "portrait",
     "icons": [
         {
-            "src": "/splash-icon-512.png",
+            "src": "/splash-solid-512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any"
