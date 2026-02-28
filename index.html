@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#081528" />
+  <meta name="theme-color" content="#0b1120" />
   <link rel="icon" type="image/png" href="/favicon.png?v=2" />
   <link rel="apple-touch-icon" href="/favicon.png?v=2" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -16,108 +16,217 @@
   <meta property="og:description" content="Conecta con tus amigos de forma segura y divertida." />
   <meta property="og:type" content="website" />
   <style>
-    /* Estilos inline para que carguen INMEDIATAMENTE al abrir la app o recargar */
+    /* Estilos base */
     body {
-      background-color: #1a1a2e;
+      background-color: #0b1120;
       margin: 0;
       padding: 0;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
     .splash-container {
+      position: fixed;
+      inset: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100dvh;
-      width: 100vw;
-      background-color: #081528;
-      background-image: url('/splash.png');
-      background-size: cover;
-      background-position: center center;
-      background-repeat: no-repeat;
+      background: radial-gradient(circle at 50% 50%, #1e293b 0%, #020617 100%);
       color: white;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      z-index: 9999;
+      perspective: 1000px;
     }
 
-    /* Hide elements that are now integrated in the image */
-    .splash-icon,
-    .splash-title,
-    .splash-subtitle {
-      display: none !important;
+    /* Fondo animado sutil */
+    .splash-bg-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation: pulse-bg 4s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+
+    /* Contenedor principal 3D */
+    .splash-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform-style: preserve-3d;
+      animation: float 6s ease-in-out infinite;
+      z-index: 10;
+    }
+
+    /* Ícono Neón Moderno */
+    .splash-icon-wrapper {
+      position: relative;
+      width: 130px;
+      height: 130px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .splash-icon-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #10b981, #0ea5e9);
+      border-radius: 35px;
+      transform: rotate(45deg);
+      box-shadow: 0 20px 50px rgba(16, 185, 129, 0.3), inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+      animation: rotate-bg 15s linear infinite;
     }
 
     .splash-icon {
-      width: 110px;
-      height: 110px;
-      background-color: white;
+      position: relative;
+      width: 100px;
+      height: 100px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       border-radius: 28px;
       display: flex;
       justify-content: center;
       align-items: center;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
-      animation: splash-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.2);
     }
 
     .splash-icon svg {
-      width: 60px;
-      height: 60px;
-      color: #00a884;
+      width: 50px;
+      height: 50px;
+      color: #10b981;
+      filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8));
+      animation: beat 2s ease-in-out infinite alternate;
     }
 
+    /* Typografía */
     .splash-title {
-      margin-top: 25px;
-      font-size: 38px;
-      font-weight: 900;
-      font-family: 'Arial Black', Impact, sans-serif;
-      letter-spacing: -1px;
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
       opacity: 0;
-      animation: splash-fade 0.5s ease forwards 0.2s;
+      transform: translateY(20px);
+      animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.3s;
+      margin: 0;
     }
 
     .splash-subtitle {
-      margin-top: 10px;
-      font-size: 15px;
-      font-weight: 600;
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      color: #10b981;
+      letter-spacing: 4px;
       text-transform: uppercase;
-      letter-spacing: 2px;
       opacity: 0;
-      animation: splash-fade 0.5s ease forwards 0.4s;
-      color: rgba(255, 255, 255, 0.9);
+      transform: translateY(20px);
+      animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.5s;
     }
 
-    .splash-loader {
+    /* Loading Moderno */
+    .splash-loader-bar {
       margin-top: 50px;
-      width: 32px;
-      height: 32px;
-      border: 3px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: splash-spin 1s linear infinite;
+      width: 140px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
       opacity: 0;
-      animation: splash-spin 1s linear infinite, splash-fade 0.5s ease forwards 0.6s;
+      animation: fade-in 0.5s ease forwards 0.8s;
+      position: relative;
     }
 
-    @keyframes splash-pop {
-      from {
-        transform: scale(0.6);
-        opacity: 0;
+    .splash-loader-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, #10b981, #0ea5e9);
+      border-radius: 4px;
+      animation: sweep 1.5s ease-in-out infinite;
+    }
+
+    /* Animaciones */
+    @keyframes pulse-bg {
+      0% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0.5;
       }
 
-      to {
-        transform: scale(1);
+      100% {
+        transform: translate(-50%, -50%) scale(1.2);
         opacity: 1;
       }
     }
 
-    @keyframes splash-fade {
+    @keyframes rotate-bg {
+      0% {
+        transform: rotate(45deg);
+      }
+
+      100% {
+        transform: rotate(405deg);
+      }
+    }
+
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-15px);
+      }
+    }
+
+    @keyframes beat {
+      0% {
+        transform: scale(0.95);
+      }
+
+      100% {
+        transform: scale(1.05);
+      }
+    }
+
+    @keyframes slide-up {
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fade-in {
       to {
         opacity: 1;
       }
     }
 
-    @keyframes splash-spin {
-      to {
-        transform: rotate(360deg);
+    @keyframes sweep {
+      0% {
+        left: -40%;
+      }
+
+      50% {
+        left: 100%;
+        width: 40%;
+      }
+
+      100% {
+        left: -40%;
+        width: 40%;
       }
     }
   </style>
@@ -126,16 +235,28 @@
 <body>
   <div id="root" style="height: 100dvh; display: flex;">
     <div class="splash-container">
-      <div class="splash-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-          stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"></path>
-          <path d="M9 12h.01"></path>
-          <path d="M15 12h.01"></path>
-        </svg>
+      <div class="splash-bg-glow"></div>
+
+      <div class="splash-content">
+        <div class="splash-icon-wrapper">
+          <div class="splash-icon-bg"></div>
+          <div class="splash-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"></path>
+              <circle cx="9" cy="12" r="1.5" fill="currentColor"></circle>
+              <circle cx="15" cy="12" r="1.5" fill="currentColor"></circle>
+            </svg>
+          </div>
+        </div>
+
+        <h1 class="splash-title">Konek</h1>
+        <div class="splash-subtitle">Iniciando...</div>
+
+        <div class="splash-loader-bar">
+          <div class="splash-loader-fill"></div>
+        </div>
       </div>
-      <div class="splash-title">Konek.fun</div>
-      <div class="splash-subtitle">La mejor conexión</div>
     </div>
   </div>
   <script type="module" src="/src/main.jsx"></script>
