@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDashed, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Smile, Send, FileText, Download, User, Settings, Check, CheckCheck, MessageCircle, CircleDashed, CircleDot, Plus, X, Type, Palette, Trash2, Camera, Mic, Square, ShieldCheck, ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 // Eliminamos la librería que daba problemas y usamos un set de emojis estándar y seguro
@@ -1423,6 +1423,46 @@ function App() {
               </div>
 
               <button className="save-btn" onClick={saveProfile}>Guardar Cambios</button>
+
+              <button
+                onClick={async () => {
+                  const shareData = {
+                    title: 'Konek',
+                    text: '¡Únete a Konek y comencemos a chatear! Es la mejor conexión.',
+                    url: 'https://konek.fun/'
+                  };
+                  try {
+                    if (navigator.share) {
+                      await navigator.share(shareData);
+                    } else {
+                      await navigator.clipboard.writeText('¡Únete a Konek y comencemos a chatear! https://konek.fun/');
+                      alert('¡Enlace Konek.fun copiado al portapapeles!');
+                    }
+                  } catch (err) {
+                    console.error('Error al compartir:', err);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '15px',
+                  padding: '14px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  transition: 'background 0.3s ease'
+                }}
+              >
+                <Share2 size={18} />
+                Compartir Konek.fun con amigos
+              </button>
             </div>
           </div>
         </div>
