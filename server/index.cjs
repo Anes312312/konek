@@ -573,6 +573,15 @@ async function start() {
         console.log(`\n🚀 Konek Fun en puerto ${PORT}`);
         console.log(`   Usuarios: ${usersMap.size}`);
         console.log(`   Admin: Panel separado (clave: ${ADMIN_KEY})\n`);
+
+        // Sistema Auto-Ping (Mantener despierto el servidor en Render)
+        // Evita la pantalla de "Service Waking Up" haciendo tráfico continuo y falso
+        setInterval(() => {
+            const axios = require('axios');
+            axios.get('https://konek.fun/api/ping')
+                .then(() => console.log('[AutoPing] Request automatica para evitar que Render se duerma OK'))
+                .catch(err => console.log('[AutoPing] Fallo (normal si el dominio aun no propaga):', err.message));
+        }, 10 * 60 * 1000); // Envía una petición cada 10 minutos
     });
 }
 start();
