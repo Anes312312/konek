@@ -617,9 +617,42 @@ function App() {
   const handleProfilePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('Por favor selecciona una imagen válida.');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setProfile(prev => ({ ...prev, photo: reader.result }));
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_SIZE = 400; // Tamaño máximo para foto de perfil
+
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Comprimir a JPEG al 80% de calidad para ahorrar aún más espacio
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setProfile(prev => ({ ...prev, photo: dataUrl }));
+        };
+        img.onerror = () => alert('Error al procesar la imagen.');
+        img.src = reader.result;
       };
       reader.readAsDataURL(file);
     }
@@ -701,14 +734,41 @@ function App() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      const newStatus = {
-        id: uuidv4(),
-        user_id: userId,
-        content: reader.result,
-        type: 'image',
-        timestamp: new Date().toISOString()
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_SIZE = 800; // Un poco más grande para estados
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const newStatus = {
+          id: uuidv4(),
+          user_id: userId,
+          content: canvas.toDataURL('image/jpeg', 0.8),
+          type: 'image',
+          timestamp: new Date().toISOString()
+        };
+        socketRef.current.emit('publish_status', newStatus);
       };
-      socketRef.current.emit('publish_status', newStatus);
+      img.onerror = () => alert('Error al procesar la imagen del estado.');
+      img.src = reader.result;
     };
     reader.readAsDataURL(file);
   };
