@@ -1241,7 +1241,8 @@ function App() {
   const sendMundoPost = () => {
     if (!mundoInput.trim()) return;
     socketRef.current.emit('mundo_post', {
-      userId, displayName: profile.name, anonymous: mundoAnonymous, text: mundoInput.trim()
+      userId, displayName: profile.name, anonymous: mundoAnonymous,
+      text: mundoInput.trim(), profilePic: mundoAnonymous ? '' : (profile.photo || '')
     });
     setMundoInput('');
   };
@@ -2332,49 +2333,88 @@ function App() {
 
       {/* ===== MUNDO TAB ===== */}
       {activeTab === 'mundo' && (
-        <div className="sidebar" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'var(--wa-bg)',
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 10,
+          overflow: 'hidden'
+        }}>
+          {/* Header Mundo */}
+          <div style={{ height: 60, background: 'var(--wa-header)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--wa-border)' }}>
+            <button onClick={() => setActiveTab('chats')} className="icon-btn" style={{ marginLeft: -8, color: 'var(--wa-text-primary)' }}>
+              <ChevronLeft size={24} />
+            </button>
+            <Globe size={22} color="var(--wa-accent)" />
+            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--wa-text-primary)', flex: 1 }}>Mundo</span>
+            {!showMundoAnonModal && (
+              <span style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>{mundoAnonymous ? '🕵️ Anónimo' : `👤 ${profile.name}`}
+                <button onClick={() => { localStorage.removeItem('konek_mundo_joined'); setShowMundoAnonModal(true); }}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: 'var(--wa-accent)', cursor: 'pointer', fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--wa-accent)' }}>Cambiar</button>
+              </span>
+            )}
+          </div>
+
           {showMundoAnonModal ? (
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <Globe size={48} color="var(--wa-accent)" />
-              <h3 style={{ color: 'var(--wa-text-primary)', textAlign: 'center', margin: 0 }}>Bienvenido al Mundo</h3>
-              <p style={{ color: 'var(--wa-text-secondary)', textAlign: 'center', fontSize: 13, margin: 0 }}>Un muro donde todos pueden publicar. ¿Cómo querés aparecer?</p>
-              <button onClick={() => joinMundo(false)} style={{ width: '100%', padding: '14px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>👤 Con mi nombre: {profile.name}</button>
-              <button onClick={() => joinMundo(true)} style={{ width: '100%', padding: '14px', background: '#2a3942', color: 'var(--wa-text-primary)', border: '1px solid var(--wa-border)', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🕵️ Anónimo</button>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+              <Globe size={56} color="var(--wa-accent)" />
+              <h3 style={{ color: 'var(--wa-text-primary)', textAlign: 'center', margin: 0, fontSize: 22 }}>Bienvenido al Mundo</h3>
+              <p style={{ color: 'var(--wa-text-secondary)', textAlign: 'center', fontSize: 14, margin: 0, maxWidth: 340 }}>Un muro global donde todos los usuarios pueden publicar y leer, sean contactos o no. ¿Cómo querés aparecer?</p>
+              <button onClick={() => joinMundo(false)} style={{ width: '100%', maxWidth: 340, padding: '15px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                {profile.photo ? <img src={profile.photo} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} /> : '👤'}
+                Con mi nombre: {profile.name}
+              </button>
+              <button onClick={() => joinMundo(true)} style={{ width: '100%', maxWidth: 340, padding: '15px', background: '#2a3942', color: 'var(--wa-text-primary)', border: '1px solid var(--wa-border)', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>🕵️ Anónimo</button>
             </div>
           ) : (
             <>
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--wa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                <span style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>Aparecés como: <strong style={{ color: 'var(--wa-text-primary)' }}>{mundoAnonymous ? '🕵️ Anónimo' : `👤 ${profile.name}`}</strong></span>
-                <button onClick={() => { localStorage.removeItem('konek_mundo_joined'); setShowMundoAnonModal(true); }} className="icon-btn" style={{ fontSize: 11, padding: '4px 8px', height: 'auto' }}>Cambiar</button>
-              </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-                {mundoPosts.length === 0 && <div style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', marginTop: 40, fontSize: 13 }}>No hay publicaciones aún. ¡Sé el primero!</div>}
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {mundoPosts.length === 0 && (
+                  <div style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', marginTop: 60, fontSize: 14 }}>No hay publicaciones aún. ¡Sé el primero!</div>
+                )}
                 {[...mundoPosts].reverse().map(post => (
-                  <div key={post.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--wa-border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: post.anonymous ? '#4a5568' : 'var(--wa-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'white', fontWeight: 700, flexShrink: 0 }}>{post.anonymous ? '?' : (post.displayName || '?')[0].toUpperCase()}</div>
+                  <div key={post.id} style={{ padding: '14px 20px', borderBottom: '1px solid var(--wa-border)', maxWidth: 680, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      {/* Avatar: foto si existe y no es anónimo, inicial si es anónimo */}
+                      {!post.anonymous && post.profilePic ? (
+                        <img src={post.profilePic} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: post.anonymous ? '#4a5568' : 'var(--wa-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, color: 'white', fontWeight: 700, flexShrink: 0 }}>
+                          {post.anonymous ? '?' : (post.displayName || '?')[0].toUpperCase()}
+                        </div>
+                      )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
                         <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                       {post.userId !== userId && !post.anonymous && !availableUsers.find(u => u.id === post.userId) && (
-                        <button onClick={() => sendFriendRequest(post.userId, post.displayName)} disabled={mundoFriendReqSent[post.userId]} style={{ fontSize: 11, padding: '5px 10px', background: mundoFriendReqSent[post.userId] ? '#2a3942' : 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: mundoFriendReqSent[post.userId] ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{mundoFriendReqSent[post.userId] ? '✓ Enviado' : '➕ Agregar'}</button>
+                        <button onClick={() => sendFriendRequest(post.userId, post.displayName)} disabled={mundoFriendReqSent[post.userId]}
+                          style={{ fontSize: 12, padding: '6px 12px', background: mundoFriendReqSent[post.userId] ? '#2a3942' : 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: mundoFriendReqSent[post.userId] ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                          {mundoFriendReqSent[post.userId] ? '✓ Enviado' : '➕ Agregar'}
+                        </button>
                       )}
                     </div>
-                    <p style={{ margin: 0, fontSize: 14, color: 'var(--wa-text-primary)', lineHeight: 1.5 }}>{post.text}</p>
+                    <p style={{ margin: 0, fontSize: 15, color: 'var(--wa-text-primary)', lineHeight: 1.6, paddingLeft: 48 }}>{post.text}</p>
                   </div>
                 ))}
               </div>
-              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0 }}>
-                <input type="text" value={mundoInput} onChange={e => setMundoInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendMundoPost()} placeholder="Escribe algo para el Mundo..." style={{ flex: 1, padding: '10px 14px', borderRadius: 20, border: 'none', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', outline: 'none', fontSize: 13 }} />
-                <button onClick={sendMundoPost} className="icon-btn" style={{ background: 'var(--wa-accent)', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}><Send size={18} color="white" /></button>
+              <div style={{ padding: '10px 16px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--wa-header)' }}>
+                <input type="text" value={mundoInput} onChange={e => setMundoInput(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && sendMundoPost()}
+                  placeholder="Escribe algo para el Mundo..."
+                  style={{ flex: 1, padding: '11px 16px', borderRadius: 24, border: 'none', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', outline: 'none', fontSize: 14 }} />
+                <button onClick={sendMundoPost} style={{ background: 'var(--wa-accent)', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <Send size={20} color="white" />
+                </button>
               </div>
             </>
           )}
         </div>
       )}
 
-      <div className="chat-window">
+      <div className="chat-window" style={activeTab === 'mundo' ? { display: 'none' } : {}}>
         {!activeChat ? (
           <div className="chat-placeholder">
             <div className="placeholder-content">

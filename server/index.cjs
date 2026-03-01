@@ -565,7 +565,8 @@ io.on('connection', (socket) => {
                 text: data.text || '',
                 image: data.image || null,
                 timestamp: new Date().toISOString(),
-                reactions: []
+                reactions: [],
+                profilePic: data.profilePic || ''
             };
             mundoMessages.push(post);
             if (mundoMessages.length > 200) mundoMessages.splice(0, mundoMessages.length - 200);
