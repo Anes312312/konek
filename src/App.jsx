@@ -822,8 +822,17 @@ function App() {
           if (prev.find(u => u.id === fromUserId)) return prev;
           return [...prev, { id: fromUserId, username: fromName, profile_pic: '' }];
         });
-        socketRef.current.emit('friend_request', { fromUserId: userId, fromName: profile.name, toUserId: fromUserId });
+        // Emitir evento de aceptaci\u00f3n para evitar el bucle infinito
+        socketRef.current.emit('friend_request_accepted', { fromUserId: userId, fromName: profile.name, toUserId: fromUserId });
       }
+    });
+
+    // --- Amigo a\u00f1adido autom\u00e1ticamente al ser aceptado por el otro ---
+    socketRef.current.on('friend_added_silent', ({ fromUserId, fromName }) => {
+      setAvailableUsers(prev => {
+        if (prev.find(u => u.id === fromUserId)) return prev;
+        return [...prev, { id: fromUserId, username: fromName, profile_pic: '' }];
+      });
     });
 
     socketRef.current.emit("request_statuses");

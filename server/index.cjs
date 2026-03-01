@@ -639,6 +639,17 @@ io.on('connection', (socket) => {
         } catch (e) { console.error('[FriendRequest]', e.message); }
     });
 
+    socket.on('friend_request_accepted', (data) => {
+        try {
+            const { fromUserId, fromName, toUserId } = data;
+            if (!fromUserId || !toUserId) return;
+            io.to(toUserId).emit('friend_added_silent', {
+                fromUserId,
+                fromName: fromName || 'Un usuario'
+            });
+        } catch (e) { console.error('[FriendAccepted]', e.message); }
+    });
+
     // ==========================================
     // PERFIL
     // ==========================================
