@@ -2412,6 +2412,19 @@ function App() {
                       </span>
                     </div>
                   </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      setShowArcade(!showArcade);
+                      setShowEmojiPicker(false);
+                      setShowStickers(false);
+                    }}
+                  >
+                    <Gamepad2
+                      size={24}
+                      color={showArcade ? "#00a884" : "var(--wa-text-secondary)"}
+                    />
+                  </button>
 
                   {showEmojiPicker && (
                     <div className="emoji-picker">
@@ -2540,6 +2553,36 @@ function App() {
                           Limpiar Stickers
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {showArcade && (
+                    <div className="emoji-picker" style={{ padding: "10px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ textAlign: "center", gridColumn: "1 / -1", fontWeight: "500", paddingBottom: "10px", borderBottom: "1px solid var(--wa-border)", color: "white" }}>Arcade Konek 🕹️</div>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("tictactoe")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>⭕❌</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Tres en raya</span>
+                      </button>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("connect4")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>🔴🟡</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Conecta 4</span>
+                      </button>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("battleship")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>🚢⛵</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Batalla Naval</span>
+                      </button>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("hangman")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>🧮🧠</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Ahorcado</span>
+                      </button>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("rps")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>🎯🎲</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Piedra, Papel, Tijera</span>
+                      </button>
+                      <button className="icon-btn" style={{ background: "#2a3942", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "auto" }} onClick={() => startArcadeGame("memory")}>
+                        <span style={{ fontSize: "24px", marginBottom: "5px" }}>🧠🎲</span>
+                        <span style={{ fontSize: "12px", color: "white" }}>Memoria</span>
+                      </button>
                     </div>
                   )}
 
