@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Share2,
+  Image as ImageIcon
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
@@ -230,7 +231,7 @@ import "./index.css";
 // Configuración para el dominio konek.fun
 const SERVER_URL =
   window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1"
+    window.location.hostname === "127.0.0.1"
     ? `${window.location.protocol}//${window.location.hostname}:5000`
     : "https://konek.fun";
 
@@ -251,11 +252,11 @@ function App() {
       return savedProfile
         ? JSON.parse(savedProfile)
         : {
-            name: "Mi Usuario",
-            description: "¡Usando Konek Fun!",
-            photo: null,
-            number: "",
-          };
+          name: "Mi Usuario",
+          description: "¡Usando Konek Fun!",
+          photo: null,
+          number: "",
+        };
     } catch (e) {
       console.error("Error parsing profile from localStorage", e);
       return {
@@ -519,11 +520,11 @@ function App() {
             return prev.map((u) =>
               u.id === message.sender_id
                 ? {
-                    ...u,
-                    username: message.sender_name,
-                    profile_pic: message.sender_pic,
-                    phone_number: message.sender_phone,
-                  }
+                  ...u,
+                  username: message.sender_name,
+                  profile_pic: message.sender_pic,
+                  phone_number: message.sender_phone,
+                }
                 : u,
             );
           }
@@ -2986,8 +2987,8 @@ function App() {
                 <div style={{ fontSize: 11, opacity: 0.8 }}>
                   {viewingGroup.items[currentIdx]?.timestamp
                     ? new Date(
-                        viewingGroup.items[currentIdx].timestamp,
-                      ).toLocaleString()
+                      viewingGroup.items[currentIdx].timestamp,
+                    ).toLocaleString()
                     : "Recientemente"}
                 </div>
               </div>
