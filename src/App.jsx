@@ -1816,7 +1816,7 @@ function App() {
           </div>
         </div>
 
-        {activeTab === "chats" ? (
+        {activeTab === "chats" && (
           <>
             <div className="search-container">
               <form onSubmit={startNewChat} style={{ display: "flex", gap: 8 }}>
@@ -1989,7 +1989,9 @@ function App() {
               ))}
             </div>
           </>
-        ) : (
+        )}
+
+        {activeTab === "statuses" && (
           <div className="status-list-container">
             <div className="status-section">
               {(() => {
@@ -2334,13 +2336,16 @@ function App() {
       {/* ===== MUNDO TAB ===== */}
       {activeTab === 'mundo' && (
         <div style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'var(--wa-bg)',
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 10,
-          overflow: 'hidden'
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "var(--wa-bg)",
+          display: "flex",
+          flexDirection: "column",
+          zIndex: 999,
+          overflow: "hidden",
         }}>
           {/* Header Mundo */}
           <div style={{ height: 60, background: 'var(--wa-header)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--wa-border)' }}>
@@ -2412,7 +2417,8 @@ function App() {
             </>
           )}
         </div>
-      )}
+      )
+      }
 
       <div className="chat-window" style={activeTab === 'mundo' ? { display: 'none' } : {}}>
         {!activeChat ? (
@@ -2638,11 +2644,11 @@ function App() {
                         </div>
                       </div>
                     ) : msg.type === "audio" ? (
-                      <div style={{ padding: "5px" }}>
+                      <div style={{ padding: "0px", width: "100%", maxWidth: "300px", marginTop: 4 }}>
                         <audio
                           src={`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`}
                           controls
-                          style={{ height: "35px", width: "220px" }}
+                          style={{ height: "40px", width: "100%", display: "block", borderRadius: "8px" }}
                         />
                       </div>
                     ) : msg.type === "file" ? (
@@ -2723,7 +2729,7 @@ function App() {
                       </div>
                     )}
                   </div>
-                ))};
+                ))}
 
               {uploadProgress && (
                 <div className="message me" style={{ opacity: 0.8 }}>
@@ -3071,891 +3077,913 @@ function App() {
       {/* --- SECCIÓN DE MODALES (Al final para asegurar visibilidad) --- */}
 
       {/* Modal Programar Mensaje */}
-      {showScheduleModal && (
-        <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
-            <div className="modal-header">
-              <h3>⏰ Programar Mensaje</h3>
-              <button onClick={() => setShowScheduleModal(false)} className="icon-btn">×</button>
-            </div>
-            <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <textarea
-                value={scheduleInput}
-                onChange={e => setScheduleInput(e.target.value)}
-                placeholder="Escribe el mensaje a programar..."
-                rows={3}
-                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, resize: 'none', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-              />
-              <input
-                type="datetime-local"
-                value={scheduleDateTime}
-                onChange={e => setScheduleDateTime(e.target.value)}
-                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' }}
-              />
-              <button onClick={scheduleMessage} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Programar envío</button>
-              {scheduledMessages.filter(m => m.receiverId === activeChat?.id).length > 0 && (
-                <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)', borderTop: '1px solid var(--wa-border)', paddingTop: 10 }}>
-                  <strong>Programados para este chat:</strong>
-                  {scheduledMessages.filter(m => m.receiverId === activeChat?.id).map(m => (
-                    <div key={m.id} style={{ marginTop: 4 }}>💤 "{m.text.substring(0, 30)}..." → {new Date(m.sendAt).toLocaleString()}</div>
-                  ))}
-                </div>
-              )}
+      {
+        showScheduleModal && (
+          <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
+              <div className="modal-header">
+                <h3>⏰ Programar Mensaje</h3>
+                <button onClick={() => setShowScheduleModal(false)} className="icon-btn">×</button>
+              </div>
+              <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <textarea
+                  value={scheduleInput}
+                  onChange={e => setScheduleInput(e.target.value)}
+                  placeholder="Escribe el mensaje a programar..."
+                  rows={3}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, resize: 'none', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                />
+                <input
+                  type="datetime-local"
+                  value={scheduleDateTime}
+                  onChange={e => setScheduleDateTime(e.target.value)}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                />
+                <button onClick={scheduleMessage} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Programar envío</button>
+                {scheduledMessages.filter(m => m.receiverId === activeChat?.id).length > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)', borderTop: '1px solid var(--wa-border)', paddingTop: 10 }}>
+                    <strong>Programados para este chat:</strong>
+                    {scheduledMessages.filter(m => m.receiverId === activeChat?.id).map(m => (
+                      <div key={m.id} style={{ marginTop: 4 }}>💤 "{m.text.substring(0, 30)}..." → {new Date(m.sendAt).toLocaleString()}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Modal PIN Lock - Entrada */}
-      {showPinModal && activeChat && lockedChats[activeChat.id] && (
-        <div className="modal-overlay">
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
-            <div style={{ padding: '24px 20px' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-              <h3 style={{ color: 'var(--wa-text-primary)', marginBottom: 8 }}>Chat Bloqueado</h3>
-              <p style={{ color: 'var(--wa-text-secondary)', fontSize: 13, marginBottom: 16 }}>Introduce el PIN para acceder</p>
-              <input
-                type="password"
-                maxLength={6}
-                value={pinEntry}
-                onChange={e => setPinEntry(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && unlockChatWithPin()}
-                placeholder="PIN"
-                style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', outline: 'none', marginBottom: 12 }}
-                autoFocus
-              />
-              <button onClick={unlockChatWithPin} style={{ width: '100%', padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Desbloquear</button>
+      {
+        showPinModal && activeChat && lockedChats[activeChat.id] && (
+          <div className="modal-overlay">
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
+              <div style={{ padding: '24px 20px' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+                <h3 style={{ color: 'var(--wa-text-primary)', marginBottom: 8 }}>Chat Bloqueado</h3>
+                <p style={{ color: 'var(--wa-text-secondary)', fontSize: 13, marginBottom: 16 }}>Introduce el PIN para acceder</p>
+                <input
+                  type="password"
+                  maxLength={6}
+                  value={pinEntry}
+                  onChange={e => setPinEntry(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && unlockChatWithPin()}
+                  placeholder="PIN"
+                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', outline: 'none', marginBottom: 12 }}
+                  autoFocus
+                />
+                <button onClick={unlockChatWithPin} style={{ width: '100%', padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Desbloquear</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Modal PIN Lock - Crear PIN */}
-      {showSetPinModal && activeChat && (
-        <div className="modal-overlay" onClick={() => setShowSetPinModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
-            <div className="modal-header">
-              <h3>🔒 Bloquear Chat</h3>
-              <button onClick={() => setShowSetPinModal(false)} className="icon-btn">×</button>
-            </div>
-            <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <input
-                type="password"
-                maxLength={6}
-                value={newPin}
-                onChange={e => setNewPin(e.target.value)}
-                placeholder="Crea un PIN (max 6 dígitos)"
-                style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 16, textAlign: 'center', letterSpacing: 4, boxSizing: 'border-box', outline: 'none' }}
-                autoFocus
-              />
-              <button onClick={() => newPin.length >= 4 && saveLockChat(activeChat.id, newPin)} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Confirmar PIN</button>
+      {
+        showSetPinModal && activeChat && (
+          <div className="modal-overlay" onClick={() => setShowSetPinModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
+              <div className="modal-header">
+                <h3>🔒 Bloquear Chat</h3>
+                <button onClick={() => setShowSetPinModal(false)} className="icon-btn">×</button>
+              </div>
+              <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <input
+                  type="password"
+                  maxLength={6}
+                  value={newPin}
+                  onChange={e => setNewPin(e.target.value)}
+                  placeholder="Crea un PIN (max 6 dígitos)"
+                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 16, textAlign: 'center', letterSpacing: 4, boxSizing: 'border-box', outline: 'none' }}
+                  autoFocus
+                />
+                <button onClick={() => newPin.length >= 4 && saveLockChat(activeChat.id, newPin)} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Confirmar PIN</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Modal instrucciones instalación iOS */}
-      {showIosInstallModal && (
-        <div className="modal-overlay" onClick={() => setShowIosInstallModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 320, textAlign: "center" }}>
-            <div className="modal-header">
-              <h3>Instalar en iPhone</h3>
-              <button onClick={() => setShowIosInstallModal(false)} className="icon-btn">×</button>
-            </div>
-            <div style={{ padding: "16px 20px 20px", color: "var(--wa-text-primary)" }}>
-              <p style={{ marginBottom: 16, fontSize: 14, color: "var(--wa-text-secondary)" }}>
-                En Safari, sigue estos pasos:
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>1️⃣</span>
-                  <span style={{ fontSize: 13 }}>Toca el botón <strong>Compartir</strong> (📤) en la barra inferior de Safari</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>2️⃣</span>
-                  <span style={{ fontSize: 13 }}>Desplázate y selecciona <strong>"Añadir a pantalla de inicio"</strong></span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>3️⃣</span>
-                  <span style={{ fontSize: 13 }}>Toca <strong>"Añadir"</strong> en la esquina superior derecha</span>
-                </div>
+      {
+        showIosInstallModal && (
+          <div className="modal-overlay" onClick={() => setShowIosInstallModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 320, textAlign: "center" }}>
+              <div className="modal-header">
+                <h3>Instalar en iPhone</h3>
+                <button onClick={() => setShowIosInstallModal(false)} className="icon-btn">×</button>
               </div>
-              <button
-                onClick={() => setShowIosInstallModal(false)}
-                style={{ marginTop: 20, width: "100%", padding: "12px", background: "var(--wa-accent)", color: "white", border: "none", borderRadius: 10, fontWeight: 600, cursor: "pointer" }}
-              >
-                Entendido
-              </button>
+              <div style={{ padding: "16px 20px 20px", color: "var(--wa-text-primary)" }}>
+                <p style={{ marginBottom: 16, fontSize: 14, color: "var(--wa-text-secondary)" }}>
+                  En Safari, sigue estos pasos:
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 24 }}>1️⃣</span>
+                    <span style={{ fontSize: 13 }}>Toca el botón <strong>Compartir</strong> (📤) en la barra inferior de Safari</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 24 }}>2️⃣</span>
+                    <span style={{ fontSize: 13 }}>Desplázate y selecciona <strong>"Añadir a pantalla de inicio"</strong></span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 24 }}>3️⃣</span>
+                    <span style={{ fontSize: 13 }}>Toca <strong>"Añadir"</strong> en la esquina superior derecha</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowIosInstallModal(false)}
+                  style={{ marginTop: 20, width: "100%", padding: "12px", background: "var(--wa-accent)", color: "white", border: "none", borderRadius: 10, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Entendido
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Modal de Bienvenida (Onboarding) */}
-      {showOnboarding && (
-        <div className="onboarding-overlay">
-          <div className="onboarding-card">
-            <div className="onboarding-header">
-              <div className="onboarding-logo">
-                <MessageCircle size={48} color="white" />
+      {
+        showOnboarding && (
+          <div className="onboarding-overlay">
+            <div className="onboarding-card">
+              <div className="onboarding-header">
+                <div className="onboarding-logo">
+                  <MessageCircle size={48} color="white" />
+                </div>
+                <h2>Bienvenido a Konek Fun</h2>
+                <p>Configura tu perfil para empezar a chatear</p>
               </div>
-              <h2>Bienvenido a Konek Fun</h2>
-              <p>Configura tu perfil para empezar a chatear</p>
-            </div>
 
-            <div className="onboarding-body">
-              <div
-                className="profile-photo-edit large"
-                onClick={() => profilePhotoInputRef.current.click()}
-              >
-                {profile.photo ? (
-                  <img src={profile.photo} />
-                ) : (
-                  <div className="placeholder">
-                    <Camera size={50} />
+              <div className="onboarding-body">
+                <div
+                  className="profile-photo-edit large"
+                  onClick={() => profilePhotoInputRef.current.click()}
+                >
+                  {profile.photo ? (
+                    <img src={profile.photo} />
+                  ) : (
+                    <div className="placeholder">
+                      <Camera size={50} />
+                    </div>
+                  )}
+                  <div className="overlay">
+                    <Camera size={24} /> AÑADIR FOTO
                   </div>
-                )}
-                <div className="overlay">
-                  <Camera size={24} /> AÑADIR FOTO
                 </div>
-              </div>
 
-              {/* Nuevo: Input de archivo duplicado o referencia correcta para el onboarding */}
-              <input
-                type="file"
-                ref={(el) => {
-                  // Mantenemos la referencia principal y la opcional para que no falle
-                  profilePhotoInputRef.current = el;
-                }}
-                style={{ display: "none" }}
-                accept="image/*"
-                onChange={handleProfilePhotoUpload}
-              />
-
-              <div className="input-group">
-                <label>¿Cómo te llamas?</label>
+                {/* Nuevo: Input de archivo duplicado o referencia correcta para el onboarding */}
                 <input
-                  type="text"
-                  placeholder="Tu nombre o apodo"
-                  value={profile.name === "Mi Usuario" ? "" : profile.name}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
+                  type="file"
+                  ref={(el) => {
+                    // Mantenemos la referencia principal y la opcional para que no falle
+                    profilePhotoInputRef.current = el;
+                  }}
+                  style={{ display: "none" }}
+                  accept="image/*"
+                  onChange={handleProfilePhotoUpload}
                 />
-              </div>
 
-              <div className="info-box">
-                <ShieldCheck size={20} color="var(--wa-accent)" />
-                <div>
-                  <strong>Identificación oficial</strong>
-                  <p>
-                    Una vez dentro, el administrador te asignará un número de ID
-                    único para validar tu cuenta.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                className="onboarding-submit"
-                onClick={completeOnboarding}
-              >
-                Empezar a usar Konek Fun
-              </button>
-
-              {/* Opción para ingresar con ID existente */}
-              <div style={{ marginTop: 20, textAlign: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
-                  <span style={{ fontSize: 12, color: "var(--wa-text-secondary)", whiteSpace: "nowrap" }}>¿Ya tienes una cuenta?</span>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="input-group">
+                  <label>¿Cómo te llamas?</label>
                   <input
                     type="text"
-                    placeholder="Pega tu ID de usuario..."
-                    value={loginIdInput}
-                    onChange={(e) => setLoginIdInput(e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      background: "rgba(255,255,255,0.07)",
-                      color: "white",
-                      fontSize: 13,
-                      outline: "none",
-                    }}
+                    placeholder="Tu nombre o apodo"
+                    value={profile.name === "Mi Usuario" ? "" : profile.name}
+                    onChange={(e) =>
+                      setProfile({ ...profile, name: e.target.value })
+                    }
                   />
-                  <button
-                    onClick={handleLoginWithId}
-                    style={{
-                      padding: "10px 18px",
-                      borderRadius: 10,
-                      border: "none",
-                      background: "var(--wa-accent)",
-                      color: "white",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Entrar
-                  </button>
+                </div>
+
+                <div className="info-box">
+                  <ShieldCheck size={20} color="var(--wa-accent)" />
+                  <div>
+                    <strong>Identificación oficial</strong>
+                    <p>
+                      Una vez dentro, el administrador te asignará un número de ID
+                      único para validar tu cuenta.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  className="onboarding-submit"
+                  onClick={completeOnboarding}
+                >
+                  Empezar a usar Konek Fun
+                </button>
+
+                {/* Opción para ingresar con ID existente */}
+                <div style={{ marginTop: 20, textAlign: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
+                    <span style={{ fontSize: 12, color: "var(--wa-text-secondary)", whiteSpace: "nowrap" }}>¿Ya tienes una cuenta?</span>
+                    <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="Pega tu ID de usuario..."
+                      value={loginIdInput}
+                      onChange={(e) => setLoginIdInput(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        background: "rgba(255,255,255,0.07)",
+                        color: "white",
+                        fontSize: 13,
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={handleLoginWithId}
+                      style={{
+                        padding: "10px 18px",
+                        borderRadius: 10,
+                        border: "none",
+                        background: "var(--wa-accent)",
+                        color: "white",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Entrar
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Modal de Perfil */}
-      {showProfileModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowProfileModal(false)}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Perfil</h3>
-              <button
-                onClick={() => setShowProfileModal(false)}
-                className="icon-btn"
-              >
-                ×
-              </button>
-            </div>
-            <div className="profile-edit-body">
-              <div
-                className="profile-photo-edit"
-                onClick={() => profilePhotoInputRef.current.click()}
-              >
-                {profile.photo ? (
-                  <img src={profile.photo} />
-                ) : (
-                  <div className="placeholder">
-                    <Camera size={40} />
-                  </div>
-                )}
-                <div className="overlay">
-                  <Camera size={24} /> CAMBIAR FOTO
-                </div>
+      {
+        showProfileModal && (
+          <div
+            className="modal-overlay"
+            onClick={() => setShowProfileModal(false)}
+          >
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Perfil</h3>
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  className="icon-btn"
+                >
+                  ×
+                </button>
               </div>
-              <input
-                type="file"
-                ref={profilePhotoInputRef}
-                style={{ display: "none" }}
-                accept="image/*"
-                onChange={handleProfilePhotoUpload}
-              />
-
-              <div className="input-group">
-                <label>Tu nombre</label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Tu número de identificación</label>
+              <div className="profile-edit-body">
                 <div
-                  className={`id-number-display ${profile.number ? "active" : "pending"}`}
+                  className="profile-photo-edit"
+                  onClick={() => profilePhotoInputRef.current.click()}
+                >
+                  {profile.photo ? (
+                    <img src={profile.photo} />
+                  ) : (
+                    <div className="placeholder">
+                      <Camera size={40} />
+                    </div>
+                  )}
+                  <div className="overlay">
+                    <Camera size={24} /> CAMBIAR FOTO
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  ref={profilePhotoInputRef}
+                  style={{ display: "none" }}
+                  accept="image/*"
+                  onChange={handleProfilePhotoUpload}
+                />
+
+                <div className="input-group">
+                  <label>Tu nombre</label>
+                  <input
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) =>
+                      setProfile({ ...profile, name: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label>Tu número de identificación</label>
+                  <div
+                    className={`id-number-display ${profile.number ? "active" : "pending"}`}
+                    style={{
+                      padding: "12px",
+                      background: profile.number
+                        ? "rgba(0, 168, 132, 0.1)"
+                        : "rgba(255,255,255,0.05)",
+                      borderRadius: "8px",
+                      color: profile.number
+                        ? "var(--wa-accent)"
+                        : "var(--wa-text-secondary)",
+                      fontSize: "15px",
+                      border: profile.number
+                        ? "1px solid var(--wa-accent)"
+                        : "1px solid rgba(255,255,255,0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      fontWeight: profile.number ? "600" : "400",
+                    }}
+                  >
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    >
+                      {profile.number ? (
+                        <ShieldCheck size={18} />
+                      ) : (
+                        <CircleDot size={18} className="pulse" />
+                      )}
+                      {profile.number || "Pendiente de asignar"}
+                    </div>
+                    {!profile.number && (
+                      <button
+                        onClick={handleLinkNumber}
+                        style={{
+                          background: "var(--wa-accent)",
+                          border: "none",
+                          borderRadius: "4px",
+                          color: "white",
+                          padding: "4px 8px",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Vincular
+                      </button>
+                    )}
+                  </div>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "var(--wa-text-secondary)",
+                      marginTop: 8,
+                    }}
+                  >
+                    {profile.number
+                      ? "Este ID es único y verifica tu identidad en Konek Fun."
+                      : "Solicita tu número al administrador para activar todas las funciones."}
+                  </p>
+                </div>
+
+                <div className="input-group">
+                  <label>Descripción</label>
+                  <input
+                    type="text"
+                    value={profile.description}
+                    onChange={(e) =>
+                      setProfile({ ...profile, description: e.target.value })
+                    }
+                  />
+                </div>
+
+                <button className="save-btn" onClick={saveProfile}>
+                  Guardar Cambios
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const shareData = {
+                      title: "Konek",
+                      text: "¡Únete a Konek y comencemos a chatear! Es la mejor conexión.",
+                      url: "https://konek.fun/",
+                    };
+                    try {
+                      if (navigator.share) {
+                        await navigator.share(shareData);
+                      } else {
+                        await navigator.clipboard.writeText(
+                          "¡Únete a Konek y comencemos a chatear! https://konek.fun/",
+                        );
+                        alert("¡Enlace Konek.fun copiado al portapapeles!");
+                      }
+                    } catch (err) {
+                      console.error("Error al compartir:", err);
+                    }
+                  }}
                   style={{
-                    padding: "12px",
-                    background: profile.number
-                      ? "rgba(0, 168, 132, 0.1)"
-                      : "rgba(255,255,255,0.05)",
-                    borderRadius: "8px",
-                    color: profile.number
-                      ? "var(--wa-accent)"
-                      : "var(--wa-text-secondary)",
+                    width: "100%",
+                    marginTop: "15px",
+                    padding: "14px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    color: "#10b981",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    borderRadius: "12px",
                     fontSize: "15px",
-                    border: profile.number
-                      ? "1px solid var(--wa-accent)"
-                      : "1px solid rgba(255,255,255,0.1)",
+                    fontWeight: "600",
+                    cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    fontWeight: profile.number ? "600" : "400",
+                    justifyContent: "center",
+                    gap: "10px",
+                    transition: "background 0.3s ease",
                   }}
                 >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    {profile.number ? (
-                      <ShieldCheck size={18} />
-                    ) : (
-                      <CircleDot size={18} className="pulse" />
-                    )}
-                    {profile.number || "Pendiente de asignar"}
-                  </div>
-                  {!profile.number && (
-                    <button
-                      onClick={handleLinkNumber}
-                      style={{
-                        background: "var(--wa-accent)",
-                        border: "none",
-                        borderRadius: "4px",
-                        color: "white",
-                        padding: "4px 8px",
-                        fontSize: "11px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Vincular
-                    </button>
-                  )}
-                </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: "var(--wa-text-secondary)",
-                    marginTop: 8,
-                  }}
-                >
-                  {profile.number
-                    ? "Este ID es único y verifica tu identidad en Konek Fun."
-                    : "Solicita tu número al administrador para activar todas las funciones."}
-                </p>
+                  <Share2 size={18} />
+                  Compartir Konek.fun con amigos
+                </button>
               </div>
-
-              <div className="input-group">
-                <label>Descripción</label>
-                <input
-                  type="text"
-                  value={profile.description}
-                  onChange={(e) =>
-                    setProfile({ ...profile, description: e.target.value })
-                  }
-                />
-              </div>
-
-              <button className="save-btn" onClick={saveProfile}>
-                Guardar Cambios
-              </button>
-
-              <button
-                onClick={async () => {
-                  const shareData = {
-                    title: "Konek",
-                    text: "¡Únete a Konek y comencemos a chatear! Es la mejor conexión.",
-                    url: "https://konek.fun/",
-                  };
-                  try {
-                    if (navigator.share) {
-                      await navigator.share(shareData);
-                    } else {
-                      await navigator.clipboard.writeText(
-                        "¡Únete a Konek y comencemos a chatear! https://konek.fun/",
-                      );
-                      alert("¡Enlace Konek.fun copiado al portapapeles!");
-                    }
-                  } catch (err) {
-                    console.error("Error al compartir:", err);
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  marginTop: "15px",
-                  padding: "14px",
-                  background: "rgba(16, 185, 129, 0.1)",
-                  color: "#10b981",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                  borderRadius: "12px",
-                  fontSize: "15px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "10px",
-                  transition: "background 0.3s ease",
-                }}
-              >
-                <Share2 size={18} />
-                Compartir Konek.fun con amigos
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Editor de Estado de Texto */}
-      {showTextStatusEditor && (
-        <div className="status-editor-overlay" style={{ background: statusBg }}>
-          <div className="status-editor-header">
-            <button
-              className="icon-btn"
-              onClick={() => setShowTextStatusEditor(false)}
-            >
-              <X size={24} color="white" />
-            </button>
-            <div style={{ display: "flex", gap: 15 }}>
+      {
+        showTextStatusEditor && (
+          <div className="status-editor-overlay" style={{ background: statusBg }}>
+            <div className="status-editor-header">
               <button
                 className="icon-btn"
-                onClick={() => {
-                  const colors = STATUS_COLORS;
-                  const idx = colors.indexOf(statusBg);
-                  setStatusBg(colors[(idx + 1) % colors.length]);
-                }}
-              >
-                <Palette size={24} color="white" />
-              </button>
-              <button
-                className="icon-btn"
-                onClick={() => {
-                  const fonts = STATUS_FONTS;
-                  const idx = fonts.indexOf(statusFont);
-                  setStatusFont(fonts[(idx + 1) % fonts.length]);
-                }}
-              >
-                <Type size={24} color="white" />
-              </button>
-              <button
-                className="icon-btn"
-                onClick={() => setShowStatusEmoji(!showStatusEmoji)}
-              >
-                <Smile size={24} color="white" />
-              </button>
-            </div>
-          </div>
-
-          <div className="status-editor-content">
-            <textarea
-              autoFocus
-              placeholder="Escribe un estado"
-              style={{ fontFamily: statusFont }}
-              value={statusText}
-              onChange={(e) => setStatusText(e.target.value)}
-              maxLength={700}
-            />
-
-            {showStatusEmoji && (
-              <div className="status-emoji-picker">
-                <div className="status-emoji-grid">
-                  {COMMON_EMOJIS.map((emoji, index) => (
-                    <span
-                      key={index}
-                      className="emoji-item"
-                      onClick={() => {
-                        setStatusText((prev) => prev + emoji);
-                      }}
-                    >
-                      {emoji}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button className="send-status-btn" onClick={publishTextStatus}>
-            <Send size={24} color="white" />
-          </button>
-        </div>
-      )}
-
-      {/* Modal Perfil de Contacto */}
-      {showContactProfile && activeChat && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowContactProfile(false)}
-        >
-          <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: "#111b21", color: "#e9edef", width: "350px" }}
-          >
-            <div
-              className="modal-header"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}
-            >
-              <h3>Info. del contacto</h3>
-              <button
-                onClick={() => setShowContactProfile(false)}
-                className="icon-btn"
+                onClick={() => setShowTextStatusEditor(false)}
               >
                 <X size={24} color="white" />
               </button>
-            </div>
-            <div
-              style={{
-                padding: "20px",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: "150px",
-                  height: "150px",
-                  borderRadius: "50%",
-                  background: "#6a7175",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  overflow: "hidden",
-                  marginBottom: "20px",
-                }}
-              >
-                {availableUsers.find((u) => u.id === activeChat.id)
-                  ?.profile_pic ? (
-                  <img
-                    src={
-                      availableUsers.find((u) => u.id === activeChat.id)
-                        .profile_pic
-                    }
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                  />
-                ) : (
-                  <User size={80} color="white" />
-                )}
+              <div style={{ display: "flex", gap: 15 }}>
+                <button
+                  className="icon-btn"
+                  onClick={() => {
+                    const colors = STATUS_COLORS;
+                    const idx = colors.indexOf(statusBg);
+                    setStatusBg(colors[(idx + 1) % colors.length]);
+                  }}
+                >
+                  <Palette size={24} color="white" />
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => {
+                    const fonts = STATUS_FONTS;
+                    const idx = fonts.indexOf(statusFont);
+                    setStatusFont(fonts[(idx + 1) % fonts.length]);
+                  }}
+                >
+                  <Type size={24} color="white" />
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => setShowStatusEmoji(!showStatusEmoji)}
+                >
+                  <Smile size={24} color="white" />
+                </button>
               </div>
-              {editingAlias ? (
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px', gap: '8px' }}>
-                  <input
-                    type="text"
-                    value={aliasInput}
-                    onChange={(e) => setAliasInput(e.target.value)}
-                    placeholder="Apodo local"
-                    style={{
-                      padding: "8px",
-                      borderRadius: "6px",
-                      border: "none",
-                      outline: "none",
-                      background: "#333",
-                      color: "white"
-                    }}
-                    autoFocus
-                  />
-                  <button onClick={() => handleSaveAlias(activeChat.id, aliasInput)} className="icon-btn" style={{ background: "var(--wa-accent)", color: "white", borderRadius: "50%", padding: "5px" }}>
-                    <Check size={16} />
-                  </button>
-                  <button onClick={() => setEditingAlias(false)} className="icon-btn" style={{ background: "#444", color: "white", borderRadius: "50%", padding: "5px" }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "5px" }}>
-                  <h2
-                    style={{
-                      fontSize: "24px",
-                      fontWeight: "400",
-                      margin: 0
-                    }}
-                  >
-                    {contactAliases[activeChat.id] || activeChat.name}
-                  </h2>
-                  <button
-                    onClick={() => {
-                      setAliasInput(contactAliases[activeChat.id] || activeChat.name);
-                      setEditingAlias(true);
-                    }}
-                    className="icon-btn"
-                    title="Añadir/editar apodo local"
-                  >
-                    <Pencil size={18} />
-                  </button>
+            </div>
+
+            <div className="status-editor-content">
+              <textarea
+                autoFocus
+                placeholder="Escribe un estado"
+                style={{ fontFamily: statusFont }}
+                value={statusText}
+                onChange={(e) => setStatusText(e.target.value)}
+                maxLength={700}
+              />
+
+              {showStatusEmoji && (
+                <div className="status-emoji-picker">
+                  <div className="status-emoji-grid">
+                    {COMMON_EMOJIS.map((emoji, index) => (
+                      <span
+                        key={index}
+                        className="emoji-item"
+                        onClick={() => {
+                          setStatusText((prev) => prev + emoji);
+                        }}
+                      >
+                        {emoji}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
-              <div
-                style={{
-                  fontSize: "16px",
-                  color: "var(--wa-text-secondary)",
-                  marginBottom: "20px",
-                }}
-              >
-                {availableUsers.find((u) => u.id === activeChat.id)
-                  ?.phone_number || "Sin número"}
-              </div>
             </div>
 
-            <div
-              style={{
-                background: "#202c33",
-                padding: "15px 20px",
-                marginBottom: "10px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "14px",
-                  color: "var(--wa-text-secondary)",
-                  marginBottom: "5px",
-                }}
-              >
-                Info.
-              </div>
-              <div style={{ fontSize: "16px" }}>
-                {availableUsers.find((u) => u.id === activeChat.id)?.status ||
-                  "¡Hola! Estoy usando Konek Fun."}
-              </div>
-            </div>
+            <button className="send-status-btn" onClick={publishTextStatus}>
+              <Send size={24} color="white" />
+            </button>
+          </div>
+        )
+      }
 
+      {/* Modal Perfil de Contacto */}
+      {
+        showContactProfile && activeChat && (
+          <div
+            className="modal-overlay"
+            onClick={() => setShowContactProfile(false)}
+          >
             <div
-              style={{
-                background: "#202c33",
-                padding: "15px 20px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "15px",
-              }}
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "#111b21", color: "#e9edef", width: "350px" }}
             >
               <div
-                style={{
-                  color: "#ef4444",
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  toggleBlockUser(activeChat);
-                  setShowContactProfile(false);
-                }}
+                className="modal-header"
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}
               >
-                <ShieldCheck size={20} style={{ marginRight: "15px" }} />
-                {blockedUsers.includes(activeChat.id)
-                  ? "Desbloquear contacto"
-                  : "Bloquear contacto"}
+                <h3>Info. del contacto</h3>
+                <button
+                  onClick={() => setShowContactProfile(false)}
+                  className="icon-btn"
+                >
+                  <X size={24} color="white" />
+                </button>
               </div>
               <div
                 style={{
-                  color: "#ef4444",
+                  padding: "20px",
                   display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  deleteChat(activeChat.id);
-                  setShowContactProfile(false);
                 }}
               >
-                <Trash2 size={20} style={{ marginRight: "15px" }} />
-                Vaciar chat
+                <div
+                  style={{
+                    width: "150px",
+                    height: "150px",
+                    borderRadius: "50%",
+                    background: "#6a7175",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                    marginBottom: "20px",
+                  }}
+                >
+                  {availableUsers.find((u) => u.id === activeChat.id)
+                    ?.profile_pic ? (
+                    <img
+                      src={
+                        availableUsers.find((u) => u.id === activeChat.id)
+                          .profile_pic
+                      }
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <User size={80} color="white" />
+                  )}
+                </div>
+                {editingAlias ? (
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={aliasInput}
+                      onChange={(e) => setAliasInput(e.target.value)}
+                      placeholder="Apodo local"
+                      style={{
+                        padding: "8px",
+                        borderRadius: "6px",
+                        border: "none",
+                        outline: "none",
+                        background: "#333",
+                        color: "white"
+                      }}
+                      autoFocus
+                    />
+                    <button onClick={() => handleSaveAlias(activeChat.id, aliasInput)} className="icon-btn" style={{ background: "var(--wa-accent)", color: "white", borderRadius: "50%", padding: "5px" }}>
+                      <Check size={16} />
+                    </button>
+                    <button onClick={() => setEditingAlias(false)} className="icon-btn" style={{ background: "#444", color: "white", borderRadius: "50%", padding: "5px" }}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "5px" }}>
+                    <h2
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "400",
+                        margin: 0
+                      }}
+                    >
+                      {contactAliases[activeChat.id] || activeChat.name}
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setAliasInput(contactAliases[activeChat.id] || activeChat.name);
+                        setEditingAlias(true);
+                      }}
+                      className="icon-btn"
+                      title="Añadir/editar apodo local"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  </div>
+                )}
+                <div
+                  style={{
+                    fontSize: "16px",
+                    color: "var(--wa-text-secondary)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  {availableUsers.find((u) => u.id === activeChat.id)
+                    ?.phone_number || "Sin número"}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#202c33",
+                  padding: "15px 20px",
+                  marginBottom: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--wa-text-secondary)",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Info.
+                </div>
+                <div style={{ fontSize: "16px" }}>
+                  {availableUsers.find((u) => u.id === activeChat.id)?.status ||
+                    "¡Hola! Estoy usando Konek Fun."}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#202c33",
+                  padding: "15px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "15px",
+                }}
+              >
+                <div
+                  style={{
+                    color: "#ef4444",
+                    display: "flex",
+                    alignItems: "center",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    toggleBlockUser(activeChat);
+                    setShowContactProfile(false);
+                  }}
+                >
+                  <ShieldCheck size={20} style={{ marginRight: "15px" }} />
+                  {blockedUsers.includes(activeChat.id)
+                    ? "Desbloquear contacto"
+                    : "Bloquear contacto"}
+                </div>
+                <div
+                  style={{
+                    color: "#ef4444",
+                    display: "flex",
+                    alignItems: "center",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    deleteChat(activeChat.id);
+                    setShowContactProfile(false);
+                  }}
+                >
+                  <Trash2 size={20} style={{ marginRight: "15px" }} />
+                  Vaciar chat
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Visor de Estados */}
-      {viewingGroup && (
-        <div className="status-viewer-overlay">
-          <style>{`
+      {
+        viewingGroup && (
+          <div className="status-viewer-overlay">
+            <style>{`
             @keyframes fill-progress {
               0% { width: 0%; }
               100% { width: 100%; }
             }
           `}</style>
 
-          <button
-            className="icon-btn"
-            style={{
-              position: "absolute",
-              left: 20,
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "rgba(0,0,0,0.5)",
-              zIndex: 10,
-              borderRadius: "50%",
-              width: 36,
-              height: 36,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (currentIdx > 0) setCurrentIdx((prev) => prev - 1);
-            }}
-          >
-            <ChevronLeft size={22} color="white" />
-          </button>
+            <button
+              className="icon-btn"
+              style={{
+                position: "absolute",
+                left: 20,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "rgba(0,0,0,0.5)",
+                zIndex: 10,
+                borderRadius: "50%",
+                width: 36,
+                height: 36,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentIdx > 0) setCurrentIdx((prev) => prev - 1);
+              }}
+            >
+              <ChevronLeft size={22} color="white" />
+            </button>
 
-          <button
-            className="icon-btn"
-            style={{
-              position: "absolute",
-              right: 20,
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "rgba(0,0,0,0.5)",
-              zIndex: 10,
-              borderRadius: "50%",
-              width: 36,
-              height: 36,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (currentIdx < viewingGroup.items.length - 1)
-                setCurrentIdx((prev) => prev + 1);
-              else setViewingGroup(null);
-            }}
-          >
-            <ChevronRight size={22} color="white" />
-          </button>
+            <button
+              className="icon-btn"
+              style={{
+                position: "absolute",
+                right: 20,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "rgba(0,0,0,0.5)",
+                zIndex: 10,
+                borderRadius: "50%",
+                width: 36,
+                height: 36,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentIdx < viewingGroup.items.length - 1)
+                  setCurrentIdx((prev) => prev + 1);
+                else setViewingGroup(null);
+              }}
+            >
+              <ChevronRight size={22} color="white" />
+            </button>
 
-          <div className="status-viewer-progress">
-            {viewingGroup.items.map((item, idx) => (
-              <div key={item.id} className="progress-bar-bg">
-                <div
-                  className="progress-bar-fill"
-                  style={{
-                    width: idx < currentIdx ? "100%" : "0%",
-                    animation:
-                      idx === currentIdx
-                        ? "fill-progress 5s linear forwards"
-                        : "none",
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="status-viewer-header">
-            <div className="user-info">
-              <div className="avatar-small">
-                {viewingGroup.profile_pic ? (
-                  <img src={viewingGroup.profile_pic} />
-                ) : (
-                  <User color="white" size={16} />
-                )}
-              </div>
-              <div style={{ marginLeft: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>
-                  {viewingGroup.username}
+            <div className="status-viewer-progress">
+              {viewingGroup.items.map((item, idx) => (
+                <div key={item.id} className="progress-bar-bg">
+                  <div
+                    className="progress-bar-fill"
+                    style={{
+                      width: idx < currentIdx ? "100%" : "0%",
+                      animation:
+                        idx === currentIdx
+                          ? "fill-progress 5s linear forwards"
+                          : "none",
+                    }}
+                  />
                 </div>
-                <div style={{ fontSize: 11, opacity: 0.8 }}>
-                  {viewingGroup.items[currentIdx]?.timestamp
-                    ? new Date(
-                      viewingGroup.items[currentIdx].timestamp,
-                    ).toLocaleString()
-                    : "Recientemente"}
-                </div>
-              </div>
+              ))}
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              {viewingGroup.user_id === userId && (
+
+            <div className="status-viewer-header">
+              <div className="user-info">
+                <div className="avatar-small">
+                  {viewingGroup.profile_pic ? (
+                    <img src={viewingGroup.profile_pic} />
+                  ) : (
+                    <User color="white" size={16} />
+                  )}
+                </div>
+                <div style={{ marginLeft: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    {viewingGroup.username}
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>
+                    {viewingGroup.items[currentIdx]?.timestamp
+                      ? new Date(
+                        viewingGroup.items[currentIdx].timestamp,
+                      ).toLocaleString()
+                      : "Recientemente"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                {viewingGroup.user_id === userId && (
+                  <button
+                    className="icon-btn"
+                    onClick={() =>
+                      deleteStatus(viewingGroup.items[currentIdx].id)
+                    }
+                  >
+                    <Trash2 size={20} color="white" />
+                  </button>
+                )}
                 <button
                   className="icon-btn"
-                  onClick={() =>
-                    deleteStatus(viewingGroup.items[currentIdx].id)
-                  }
+                  onClick={() => setViewingGroup(null)}
                 >
-                  <Trash2 size={20} color="white" />
+                  <X size={24} color="white" />
                 </button>
+              </div>
+            </div>
+
+            <div className="status-viewer-content">
+              {viewingGroup.items[currentIdx].type === "image" ? (
+                <img src={viewingGroup.items[currentIdx].content} />
+              ) : (
+                <div
+                  className="text-status-view"
+                  style={{
+                    background: JSON.parse(viewingGroup.items[currentIdx].content)
+                      .bg,
+                    fontFamily: JSON.parse(viewingGroup.items[currentIdx].content)
+                      .font,
+                  }}
+                >
+                  {JSON.parse(viewingGroup.items[currentIdx].content).text}
+                </div>
               )}
-              <button
-                className="icon-btn"
-                onClick={() => setViewingGroup(null)}
-              >
-                <X size={24} color="white" />
-              </button>
             </div>
           </div>
+        )
+      }
 
-          <div className="status-viewer-content">
-            {viewingGroup.items[currentIdx].type === "image" ? (
-              <img src={viewingGroup.items[currentIdx].content} />
-            ) : (
-              <div
-                className="text-status-view"
-                style={{
-                  background: JSON.parse(viewingGroup.items[currentIdx].content)
-                    .bg,
-                  fontFamily: JSON.parse(viewingGroup.items[currentIdx].content)
-                    .font,
-                }}
-              >
-                {JSON.parse(viewingGroup.items[currentIdx].content).text}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {fullscreenImage && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            backgroundColor: "rgba(0,0,0,0.9)",
-            zIndex: 9999,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={() => setFullscreenImage(null)}
+      {
+        fullscreenImage && (
+          <div
             style={{
-              position: "absolute",
-              top: 20,
-              right: 20,
-              background: "none",
-              border: "none",
-              color: "white",
-              cursor: "pointer",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              backgroundColor: "rgba(0,0,0,0.9)",
+              zIndex: 9999,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
             }}
           >
-            <X size={32} />
-          </button>
-          <img
-            src={fullscreenImage}
-            alt="Fullscreen preview"
-            style={{ maxWidth: "95%", maxHeight: "95%", objectFit: "contain" }}
-          />
-        </div>
-      )}
+            <button
+              onClick={() => setFullscreenImage(null)}
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "none",
+                border: "none",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              <X size={32} />
+            </button>
+            <img
+              src={fullscreenImage}
+              alt="Fullscreen preview"
+              style={{ maxWidth: "95%", maxHeight: "95%", objectFit: "contain" }}
+            />
+          </div>
+        )
+      }
 
-      {showLeaderboard && (
-        <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 400, background: "#111b21", color: "white" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h2 style={{ fontSize: 20, margin: 0, display: "flex", alignItems: "center", gap: 10 }}><Trophy color="#ffbd69" /> Global Arcade Leaderboard</h2>
-              <button className="icon-btn" onClick={() => setShowLeaderboard(false)}><X size={24} /></button>
-            </div>
+      {
+        showLeaderboard && (
+          <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 400, background: "#111b21", color: "white" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h2 style={{ fontSize: 20, margin: 0, display: "flex", alignItems: "center", gap: 10 }}><Trophy color="#ffbd69" /> Global Arcade Leaderboard</h2>
+                <button className="icon-btn" onClick={() => setShowLeaderboard(false)}><X size={24} /></button>
+              </div>
 
-            <div style={{ background: "#202c33", borderRadius: 8, padding: 15, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ fontSize: 14, color: "var(--wa-text-secondary)", textAlign: "center", marginBottom: 10 }}>Los mejores jugadores de Konek Fun!</div>
+              <div style={{ background: "#202c33", borderRadius: 8, padding: 15, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ fontSize: 14, color: "var(--wa-text-secondary)", textAlign: "center", marginBottom: 10 }}>Los mejores jugadores de Konek Fun!</div>
 
-              {/* Dummy data for now, would typically map from server response */}
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                <span style={{ fontWeight: "bold" }}>1. {profile.name}</span>
-                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>150 pts</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                <span style={{ fontWeight: "bold" }}>2. Usuario 2</span>
-                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>120 pts</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                <span style={{ fontWeight: "bold" }}>3. Usuario 3</span>
-                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>90 pts</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                <span style={{ fontWeight: "bold" }}>-. Tú ({profile.name})</span>
-                <span style={{ color: "#ffbd69", fontWeight: "bold" }}>150 pts</span>
+                {/* Dummy data for now, would typically map from server response */}
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                  <span style={{ fontWeight: "bold" }}>1. {profile.name}</span>
+                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>150 pts</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                  <span style={{ fontWeight: "bold" }}>2. Usuario 2</span>
+                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>120 pts</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                  <span style={{ fontWeight: "bold" }}>3. Usuario 3</span>
+                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>90 pts</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                  <span style={{ fontWeight: "bold" }}>-. Tú ({profile.name})</span>
+                  <span style={{ color: "#ffbd69", fontWeight: "bold" }}>150 pts</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 
