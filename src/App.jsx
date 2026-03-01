@@ -2409,7 +2409,7 @@ function App() {
             {!showMundoAnonModal && (
               <span style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>{mundoAnonymous ? '🕵️ Anónimo' : `👤 ${profile.name}`}
                 <button onClick={() => { localStorage.removeItem('konek_mundo_joined'); setShowMundoAnonModal(true); }}
-                  style={{ marginLeft: 8, background: 'none', border: 'none', color: 'var(--wa-accent)', cursor: 'pointer', fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--wa-accent)' }}>Cambiar</button>
+                  style={{ marginLeft: 8, background: 'none', color: 'var(--wa-accent)', cursor: 'pointer', fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--wa-accent)' }}>Cambiar</button>
               </span>
             )}
           </div>
