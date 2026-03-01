@@ -474,8 +474,12 @@ function App() {
       // (ya que el servidor ahora emite también al enviador), pero por simplicidad el React prev filter
       // lo puede manejar, o comprobamos id.
       setMessages((prev) => {
-        // Evitar duplicados por id
-        if (prev.some((m) => m.id === message.id)) return prev;
+        const index = prev.findIndex((m) => m.id === message.id);
+        if (index !== -1) {
+          const newMessages = [...prev];
+          newMessages[index] = message;
+          return newMessages;
+        }
         return [...prev, message];
       });
 
@@ -1381,7 +1385,10 @@ function App() {
         )}
 
         <div style={{ textAlign: "center", fontSize: 10, marginTop: 5 }}>
-          {gameData.state === "playing" ? (isMyTurn ? "Tu turno" : "Turno del oponente") : `Fin del juego`}
+          {gameData.state === "playing" ? (isMyTurn ? "Tu turno" : "Turno del oponente") :
+            gameData.state === "setup" ? "Esperando configuración..." :
+              gameData.state === "waiting" ? "Esperando jugador..." :
+                gameData.winner ? `¡Ganó ${gameData.winner === userId ? 'tú' : 'el oponente'}!` : `Fin del juego (Empate)`}
         </div>
       </div>
     );
