@@ -1310,7 +1310,7 @@ function App() {
         }
       }
       if (!newData.winner && !newData.board.includes(null)) newData.state = "draw";
-      if (newData.state === "playing") newData.turn = userId === msg.sender_id ? msg.user_id : msg.sender_id;
+      if (newData.state === "playing") newData.turn = userId === msg.sender_id ? msg.receiver_id : msg.sender_id;
     }
     // Simplified logic for other games to save space, but functional
     else if (gameType === "connect4") {
@@ -1322,7 +1322,7 @@ function App() {
           break;
         }
       }
-      newData.turn = userId === msg.sender_id ? msg.user_id : msg.sender_id;
+      newData.turn = userId === msg.sender_id ? msg.receiver_id : msg.sender_id;
     }
     else if (gameType === "rps") {
       if (newData.state === "finished") return;
