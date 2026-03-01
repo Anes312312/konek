@@ -1071,6 +1071,20 @@ function App() {
     socketRef.current.emit("update_profile", { userId, profile });
   };
 
+  const [loginIdInput, setLoginIdInput] = useState("");
+
+  const handleLoginWithId = () => {
+    const trimmedId = loginIdInput.trim();
+    if (!trimmedId) {
+      alert("Por favor, pega tu ID de usuario para continuar.");
+      return;
+    }
+    localStorage.setItem("konek_userId", trimmedId);
+    localStorage.setItem("konek_setup_done", "true");
+    window.location.reload();
+  };
+
+
   const deleteChat = (userIdToDelete) => {
     if (
       window.confirm(
@@ -2823,6 +2837,49 @@ function App() {
               >
                 Empezar a usar Konek Fun
               </button>
+
+              {/* Opción para ingresar con ID existente */}
+              <div style={{ marginTop: 20, textAlign: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
+                  <span style={{ fontSize: 12, color: "var(--wa-text-secondary)", whiteSpace: "nowrap" }}>¿Ya tienes una cuenta?</span>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.15)" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Pega tu ID de usuario..."
+                    value={loginIdInput}
+                    onChange={(e) => setLoginIdInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      background: "rgba(255,255,255,0.07)",
+                      color: "white",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={handleLoginWithId}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: "var(--wa-accent)",
+                      color: "white",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Entrar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
