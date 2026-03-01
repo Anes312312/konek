@@ -1266,6 +1266,7 @@ function App() {
       id: uuidv4(),
       user_id: activeChat.id,
       sender_id: userId,
+      receiver_id: activeChat.id,
       content: `Reto de ${gameType}!`,
       type: "game",
       gameType,
