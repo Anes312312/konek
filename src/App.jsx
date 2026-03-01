@@ -1328,6 +1328,23 @@ function App() {
       }
       newData.turn = userId === msg.sender_id ? msg.receiver_id : msg.sender_id;
     }
+    else if (gameType === "hangman") {
+      if (newData.state === "setup" && userId === newData.creator && action.word) {
+        newData.wordX = action.word.toUpperCase();
+        newData.state = "playing";
+        newData.turn = newData.solver;
+      }
+      else if (newData.state === "playing" && userId === newData.solver) {
+        const letter = action.letter.toUpperCase();
+        if (!newData.guessed.includes(letter)) {
+          newData.guessed.push(letter);
+          if (!newData.wordX.includes(letter)) newData.wrongCount++;
+          const won = newData.wordX.split('').every(l => newData.guessed.includes(l));
+          if (won) { newData.state = "finished"; newData.winner = newData.solver; }
+          else if (newData.wrongCount >= 6) { newData.state = "finished"; newData.winner = newData.creator; }
+        }
+      }
+    }
     else if (gameType === "rps") {
       if (newData.state === "finished") return;
       if (userId === newData.p1) newData.p1Move = action.move;
@@ -1383,6 +1400,59 @@ function App() {
             ))}
           </div>
         )}
+
+        {gameType === "hangman" && (
+          <div style={{ textAlign: "center" }}>
+            {gameData.state === "setup" && userId === gameData.creator ? (
+              <div>
+                <input type="password" id={`hm-${msg.id}`} placeholder="Palabra secreta" style={{ padding: 5, width: "80%", borderRadius: 4, border: "none" }} />
+                <button onClick={() => {
+                  const w = document.getElementById(`hm-${msg.id}`).value;
+                  if (w) handleGameAction(msg, { word: w });
+                }} style={{ marginTop: 5, padding: "5px 15px", background: "#00a884", color: "#fff", border: "none", borderRadius: 4 }}>Empezar</button>
+              </div>
+            ) : gameData.state === "setup" ? (
+              <div>El oponente está eligiendo una palabra...</div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 24, letterSpacing: 5, padding: 10, background: "#222", borderRadius: 8, margin: "5px 0" }}>
+                  {gameData.wordX.split('').map(l => gameData.guessed.includes(l) ? l : "_").join('')}
+                </div>
+                <div style={{ color: "#ef5350", marginBottom: 5 }}>Errores: {gameData.wrongCount} / 6</div>
+                {gameData.state === "playing" && userId === gameData.solver && (
+                  <div style={{ marginBottom: 5 }}>
+                    <input type="text" maxLength={1} id={`g-${msg.id}`} style={{ width: 40, textAlign: "center", textTransform: "uppercase", padding: 5, borderRadius: 4, border: "none" }} />
+                    <button onClick={() => {
+                      const l = document.getElementById(`g-${msg.id}`).value;
+                      if (l) { handleGameAction(msg, { letter: l }); document.getElementById(`g-${msg.id}`).value = ""; }
+                    }} style={{ marginLeft: 5, background: "#00a884", color: "#fff", border: "none", padding: "5px 10px", borderRadius: 4 }}>Probar</button>
+                  </div>
+                )}
+                <div style={{ fontSize: 12, wordWrap: "break-word" }}>{(gameData.guessed || []).join(" - ")}</div>
+                {gameData.state === "finished" && (
+                  <div style={{ marginTop: 10, color: gameData.winner === userId ? "#00a884" : "#ef5350", fontWeight: "bold" }}>
+                    La palabra era: {gameData.wordX}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {gameType === "battleship" && (
+          <div style={{ textAlign: "center", padding: 20 }}>
+            <span style={{ fontSize: 30 }}>🛠️</span><br />
+            (Próximamente en desarrollo...)
+          </div>
+        )}
+
+        {gameType === "memory" && (
+          <div style={{ textAlign: "center", padding: 20 }}>
+            <span style={{ fontSize: 30 }}>🛠️</span><br />
+            (Próximamente en desarrollo...)
+          </div>
+        )}
+
 
         <div style={{ textAlign: "center", fontSize: 10, marginTop: 5 }}>
           {gameData.state === "playing" ? (isMyTurn ? "Tu turno" : "Turno del oponente") :

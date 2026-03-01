@@ -383,7 +383,7 @@ io.on('connection', (socket) => {
 
     socket.on('game_action', async (updatedMsg) => {
         try {
-            const receiverId = updatedMsg.receiver_id === 'global' ? 'global' : updatedMsg.user_id;
+            const receiverId = updatedMsg.receiver_id === 'global' ? 'global' : updatedMsg.receiver_id;
             const existingIdx = messagesList.findIndex(m => m.id === updatedMsg.id);
             if (existingIdx !== -1) {
                 messagesList[existingIdx] = updatedMsg;
