@@ -354,7 +354,9 @@ io.on('connection', (socket) => {
                 ...msg,
                 timestamp: new Date().toISOString(),
                 type: msg.message_type,
-                file_info: data.file_info
+                file_info: data.file_info,
+                gameType: data.gameType,
+                gameData: data.gameData
             };
 
             const senderData = usersMap.get(senderId);
@@ -377,6 +379,29 @@ io.on('connection', (socket) => {
         } catch (e) {
             console.error('[Chat]', e.message);
         }
+    });
+
+    socket.on('game_action', async (updatedMsg) => {
+        try {
+            const receiverId = updatedMsg.receiver_id === 'global' ? 'global' : updatedMsg.user_id;
+            const existingIdx = messagesList.findIndex(m => m.id === updatedMsg.id);
+            if (existingIdx !== -1) {
+                messagesList[existingIdx] = updatedMsg;
+            }
+
+            // Optional: You could update `game_stats` in Firebase if you detect `updatedMsg.gameData.state === "finished"` and there is a `winner`
+            if (updatedMsg.gameData && updatedMsg.gameData.state === "finished" && updatedMsg.gameData.winner) {
+                const winnerId = updatedMsg.gameData.winner;
+                // E.g., add +3 points logic here globally
+            }
+
+            if (receiverId === 'global') {
+                io.emit('receive_message', updatedMsg);
+            } else {
+                io.to(updatedMsg.sender_id).emit('receive_message', updatedMsg);
+                io.to(receiverId).emit('receive_message', updatedMsg);
+            }
+        } catch (e) { console.error('[Game Action]', e.message); }
     });
 
     socket.on('mark_read', ({ readerId, senderId }) => {
