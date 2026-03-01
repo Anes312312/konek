@@ -32,7 +32,8 @@ import {
   Gamepad2,
   Trophy,
   Globe,
-  Clock
+  Clock,
+  CheckCircle2
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
@@ -309,6 +310,7 @@ function App() {
   );
   const [mundoFriendReqSent, setMundoFriendReqSent] = useState({});
   const [mundoWelcomeSent, setMundoWelcomeSent] = useState(() => localStorage.getItem('konek_mundo_welcome_shown') === 'true');
+  const [selectedMundoUser, setSelectedMundoUser] = useState(null);
 
   // Detectar tipo de dispositivo/plataforma
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -2390,10 +2392,9 @@ function App() {
         )}
       </div>
 
-      {/* ===== MUNDO TAB ===== */}
       {activeTab === 'mundo' && (
         <div style={{
-          position: "absolute",
+          position: "fixed",
           top: 0,
           left: 0,
           right: 0,
@@ -2401,8 +2402,9 @@ function App() {
           background: "var(--wa-bg)",
           display: "flex",
           flexDirection: "column",
-          zIndex: 999,
+          zIndex: 1000,
           overflow: "hidden",
+          height: isMobile ? '100dvh' : '100%'
         }}>
           {/* Header Mundo */}
           <div style={{ height: 60, background: 'var(--wa-header)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--wa-border)' }}>
@@ -2488,10 +2490,10 @@ function App() {
                               <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
                               <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                             </div>
-                            {post.userId !== userId && !post.anonymous && !availableUsers.find(u => u.id === post.userId) && (
-                              <button onClick={() => sendFriendRequest(post.userId, post.displayName)} disabled={mundoFriendReqSent[post.userId]}
-                                style={{ fontSize: 12, padding: '6px 12px', background: mundoFriendReqSent[post.userId] ? '#2a3942' : 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: mundoFriendReqSent[post.userId] ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-                                {mundoFriendReqSent[post.userId] ? '✓ Enviado' : '➕ Agregar'}
+                            {post.userId !== userId && !post.anonymous && (
+                              <button onClick={() => setSelectedMundoUser(post)}
+                                style={{ fontSize: 12, padding: '6px 16px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                Ver
                               </button>
                             )}
                           </div>
@@ -4086,41 +4088,99 @@ function App() {
         )
       }
 
-      {
-        showLeaderboard && (
-          <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 400, background: "#111b21", color: "white" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <h2 style={{ fontSize: 20, margin: 0, display: "flex", alignItems: "center", gap: 10 }}><Trophy color="#ffbd69" /> Global Arcade Leaderboard</h2>
-                <button className="icon-btn" onClick={() => setShowLeaderboard(false)}><X size={24} /></button>
+      {showLeaderboard && (
+        <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 400, background: "#111b21", color: "white" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={{ fontSize: 20, margin: 0, display: "flex", alignItems: "center", gap: 10 }}><Trophy color="#ffbd69" /> Global Arcade Leaderboard</h2>
+              <button className="icon-btn" onClick={() => setShowLeaderboard(false)}><X size={24} /></button>
+            </div>
+
+            <div style={{ background: "#202c33", borderRadius: 8, padding: 15, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 14, color: "var(--wa-text-secondary)", textAlign: "center", marginBottom: 10 }}>Los mejores jugadores de Konek Fun!</div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                <span style={{ fontWeight: "bold" }}>1. {profile.name}</span>
+                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>150 pts</span>
               </div>
-
-              <div style={{ background: "#202c33", borderRadius: 8, padding: 15, display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ fontSize: 14, color: "var(--wa-text-secondary)", textAlign: "center", marginBottom: 10 }}>Los mejores jugadores de Konek Fun!</div>
-
-                {/* Dummy data for now, would typically map from server response */}
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                  <span style={{ fontWeight: "bold" }}>1. {profile.name}</span>
-                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>150 pts</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                  <span style={{ fontWeight: "bold" }}>2. Usuario 2</span>
-                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>120 pts</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                  <span style={{ fontWeight: "bold" }}>3. Usuario 3</span>
-                  <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>90 pts</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
-                  <span style={{ fontWeight: "bold" }}>-. Tú ({profile.name})</span>
-                  <span style={{ color: "#ffbd69", fontWeight: "bold" }}>150 pts</span>
-                </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                <span style={{ fontWeight: "bold" }}>2. Usuario 2</span>
+                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>120 pts</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                <span style={{ fontWeight: "bold" }}>3. Usuario 3</span>
+                <span style={{ color: "var(--wa-accent)", fontWeight: "bold" }}>90 pts</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", paddingBottom: 5 }}>
+                <span style={{ fontWeight: "bold" }}>-. Tú ({profile.name})</span>
+                <span style={{ color: "#ffbd69", fontWeight: "bold" }}>150 pts</span>
               </div>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+
+      {selectedMundoUser && (
+        <div className="modal-overlay" onClick={() => setSelectedMundoUser(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 350, textAlign: 'center', borderRadius: 24, overflow: 'hidden' }}>
+            <div style={{ height: 100, background: 'var(--wa-accent)', position: 'relative' }}>
+              <button onClick={() => setSelectedMundoUser(null)} className="icon-btn" style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.2)', borderRadius: '50%', color: 'white' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ marginTop: -50, paddingBottom: 24 }}>
+              <div style={{ width: 100, height: 100, borderRadius: '50%', border: '4px solid var(--wa-panel-bg)', background: '#6a7175', margin: '0 auto', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                {selectedMundoUser.profilePic ? (
+                  <img src={selectedMundoUser.profilePic} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <User size={50} color="white" />
+                )}
+              </div>
+              <h3 style={{ marginTop: 16, fontSize: 20, color: 'var(--wa-text-primary)', padding: '0 20px' }}>{selectedMundoUser.displayName}</h3>
+              <p style={{ color: 'var(--wa-text-secondary)', fontSize: 14, marginTop: 4, padding: '0 20px' }}>
+                {availableUsers.find(u => u.id === selectedMundoUser.userId)?.description || "Usuario de Konek Fun"}
+              </p>
+
+              <div style={{ marginTop: 24, padding: '0 24px' }}>
+                {availableUsers.find(u => u.id === selectedMundoUser.userId) ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--wa-accent)', fontWeight: 600 }}>
+                    <CheckCircle2 size={20} /> Ya son amigos
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      sendFriendRequest(selectedMundoUser.userId, selectedMundoUser.displayName);
+                      setSelectedMundoUser(null);
+                    }}
+                    disabled={mundoFriendReqSent[selectedMundoUser.userId]}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: mundoFriendReqSent[selectedMundoUser.userId] ? '#2a3942' : 'var(--wa-accent)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 12,
+                      fontWeight: 600,
+                      cursor: mundoFriendReqSent[selectedMundoUser.userId] ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {mundoFriendReqSent[selectedMundoUser.userId] ? (
+                      <>✓ Solicitud enviada</>
+                    ) : (
+                      <>➕ Agregar como amigo</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
