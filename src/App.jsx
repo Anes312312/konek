@@ -272,6 +272,40 @@ function App() {
   });
 
   const [activeChat, setActiveChat] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsInstallable(false);
+      console.log('App successfully installed as PWA');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+  };
+
   const [availableUsers, setAvailableUsers] = useState(() => {
     try {
       const savedContacts = localStorage.getItem("konek_contacts");
@@ -1562,6 +1596,15 @@ function App() {
             >
               <Settings size={20} />
             </button>
+            {isInstallable && (
+              <button
+                className="icon-btn"
+                onClick={handleInstallClick}
+                title="Instalar Aplicación"
+              >
+                <Download size={20} />
+              </button>
+            )}
           </div>
         </div>
 
