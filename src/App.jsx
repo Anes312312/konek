@@ -273,19 +273,24 @@ function App() {
 
   const [activeChat, setActiveChat] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [showIosInstallModal, setShowIosInstallModal] = useState(false);
+
+  // Detectar tipo de dispositivo/plataforma
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  // Mostrar botón si: es móvil Y la app no está ya instalada en modo standalone
+  const showInstallButton = isMobile && !isInStandaloneMode;
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsInstallable(true);
     };
 
     const handleAppInstalled = () => {
       setDeferredPrompt(null);
-      setIsInstallable(false);
-      console.log('App successfully installed as PWA');
+      console.log('App installed successfully as PWA');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -298,13 +303,22 @@ function App() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
-    setDeferredPrompt(null);
-    setIsInstallable(false);
+    if (isIOS) {
+      // iOS: no tiene beforeinstallprompt, mostramos instrucciones manuales
+      setShowIosInstallModal(true);
+      return;
+    }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`PWA install outcome: ${outcome}`);
+      setDeferredPrompt(null);
+    } else {
+      // Android sin prompt disponible (ya instalado o no elegible)
+      alert('Para instalar: en el menú de tu navegador (los 3 puntos) selecciona "Añadir a la pantalla de inicio".');
+    }
   };
+
 
   const [availableUsers, setAvailableUsers] = useState(() => {
     try {
@@ -1604,7 +1618,7 @@ function App() {
             >
               <Settings size={20} />
             </button>
-            {isInstallable && (
+            {showInstallButton && (
               <button
                 className="icon-btn"
                 onClick={handleInstallClick}
@@ -2760,6 +2774,43 @@ function App() {
       </div>
 
       {/* --- SECCIÓN DE MODALES (Al final para asegurar visibilidad) --- */}
+
+      {/* Modal instrucciones instalación iOS */}
+      {showIosInstallModal && (
+        <div className="modal-overlay" onClick={() => setShowIosInstallModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 320, textAlign: "center" }}>
+            <div className="modal-header">
+              <h3>Instalar en iPhone</h3>
+              <button onClick={() => setShowIosInstallModal(false)} className="icon-btn">×</button>
+            </div>
+            <div style={{ padding: "16px 20px 20px", color: "var(--wa-text-primary)" }}>
+              <p style={{ marginBottom: 16, fontSize: 14, color: "var(--wa-text-secondary)" }}>
+                En Safari, sigue estos pasos:
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>1️⃣</span>
+                  <span style={{ fontSize: 13 }}>Toca el botón <strong>Compartir</strong> (📤) en la barra inferior de Safari</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>2️⃣</span>
+                  <span style={{ fontSize: 13 }}>Desplázate y selecciona <strong>"Añadir a pantalla de inicio"</strong></span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>3️⃣</span>
+                  <span style={{ fontSize: 13 }}>Toca <strong>"Añadir"</strong> en la esquina superior derecha</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowIosInstallModal(false)}
+                style={{ marginTop: 20, width: "100%", padding: "12px", background: "var(--wa-accent)", color: "white", border: "none", borderRadius: 10, fontWeight: 600, cursor: "pointer" }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Bienvenida (Onboarding) */}
       {showOnboarding && (
