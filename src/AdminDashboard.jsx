@@ -13,6 +13,7 @@ function AdminDashboard() {
     const [isConnected, setIsConnected] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const [mundoIsEmpty, setMundoIsEmpty] = useState(true);
     const socketRef = useRef();
 
     useEffect(() => {
@@ -46,6 +47,10 @@ function AdminDashboard() {
 
         socketRef.current.on('online_count', (count) => {
             setOnlineCount(count);
+        });
+
+        socketRef.current.on('mundo_status', (status) => {
+            setMundoIsEmpty(status.isEmpty);
         });
 
         socketRef.current.on('error', (err) => {
@@ -153,14 +158,16 @@ function AdminDashboard() {
                                 {isAuthenticated ? 'Operacional' : 'Sin acceso'}
                             </span>
                         </div>
-                        <div className="metric-card danger" onClick={adminClearMundo} style={{ cursor: 'pointer' }}>
+                        <div className={`metric-card ${mundoIsEmpty ? 'success' : 'danger'}`} onClick={!mundoIsEmpty ? adminClearMundo : undefined} style={{ cursor: mundoIsEmpty ? 'default' : 'pointer' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                 <span className="label">Chat Mundo</span>
-                                <Globe size={16} color="#ef4444" />
+                                <Globe size={16} color={mundoIsEmpty ? '#00a884' : '#ef4444'} />
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                                <Trash2 size={24} color="#ef4444" />
-                                <span className="value" style={{ fontSize: '16px', color: '#ef4444' }}>VACIAR CHAT</span>
+                                <Trash2 size={24} color={mundoIsEmpty ? '#00a884' : '#ef4444'} />
+                                <span className="value" style={{ fontSize: '16px', color: mundoIsEmpty ? '#00a884' : '#ef4444' }}>
+                                    {mundoIsEmpty ? 'LIMPIO' : 'VACIAR CHAT'}
+                                </span>
                             </div>
                         </div>
                     </div>

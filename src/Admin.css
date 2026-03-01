@@ -189,6 +189,14 @@
     border-color: #ef4444;
 }
 
+.metric-card.success {
+    border-color: rgba(0, 168, 132, 0.3);
+}
+
+.metric-card.success .label {
+    color: #00a884;
+}
+
 .admin-table {
     width: 100%;
     border-collapse: collapse;

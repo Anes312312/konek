@@ -163,6 +163,7 @@ io.on('connection', (socket) => {
             socket.emit('admin_authenticated');
             socket.emit('admin_user_list', getUsersList());
             socket.emit('online_count', onlineUsers.size);
+            socket.emit('mundo_status', { isEmpty: mundoMessages.length === 0 });
             console.log('[Admin] ✓ Panel admin conectado');
         } catch (e) {
             console.error('[Admin] login error:', e.message);
@@ -254,6 +255,7 @@ io.on('connection', (socket) => {
             if (!isAdmin) return;
             mundoMessages.length = 0;
             io.emit('mundo_history', []);
+            io.to('admins_room').emit('mundo_status', { isEmpty: true });
             console.log('[Admin] Chat Mundo vaciado.');
         } catch (e) {
             console.error('[Admin] clear_mundo:', e.message);
@@ -582,6 +584,7 @@ io.on('connection', (socket) => {
             mundoMessages.push(post);
             if (mundoMessages.length > 200) mundoMessages.splice(0, mundoMessages.length - 200);
             io.emit('mundo_new_post', post);
+            io.to('admins_room').emit('mundo_status', { isEmpty: false });
         } catch (e) { console.error('[Mundo]', e.message); }
     });
 
