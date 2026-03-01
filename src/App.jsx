@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import io from "socket.io-client";
 import {
   Search,
@@ -311,6 +311,22 @@ function App() {
   const [mundoFriendReqSent, setMundoFriendReqSent] = useState({});
   const [mundoWelcomeSent, setMundoWelcomeSent] = useState(() => localStorage.getItem('konek_mundo_welcome_shown') === 'true');
   const [selectedMundoUser, setSelectedMundoUser] = useState(null);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => localStorage.getItem('konek_mundo_welcome_dismissed') === 'true');
+
+  // Optimization for faster loading and smoother interactions in Mundo
+  const memoizedMundoPosts = useMemo(() => {
+    let all = [...mundoPosts];
+    if (mundoWelcomeSent && !welcomeDismissed) {
+      all.push({
+        id: 'welcome_system',
+        system: true,
+        displayName: 'KonekFun Bot',
+        text: `¡Hola ${profile.name}! 👋 Te damos una cordial bienvenida a MundoFunk, el espacio global de KonekFun. Aquí podrás conectar con toda la comunidad y encontrar nuevos amigos. ¡Disfruta la experiencia! 🚀`,
+        timestamp: new Date().toISOString()
+      });
+    }
+    return all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [mundoPosts, mundoWelcomeSent, welcomeDismissed, profile.name]);
 
   // Detectar tipo de dispositivo/plataforma
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -2443,100 +2459,87 @@ function App() {
                     </div>
                   </div>
                 )}
-                {mundoPosts.length === 0 && !mundoWelcomeSent && (
+                {memoizedMundoPosts.length === 0 && !mundoWelcomeSent && (
                   <div style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', marginTop: 60, fontSize: 14 }}>No hay publicaciones aún. ¡Sé el primero!</div>
                 )}
-                {(() => {
-                  const allPosts = [...mundoPosts];
-                  if (mundoWelcomeSent && !localStorage.getItem('konek_mundo_welcome_dismissed')) {
-                    allPosts.push({
-                      id: 'welcome_system',
-                      system: true,
-                      displayName: 'KonekFun Bot',
-                      text: `¡Hola ${profile.name}! 👋 Te damos una cordial bienvenida a MundoFunk, el espacio global de KonekFun. Aquí podrás conectar con toda la comunidad y encontrar nuevos amigos. ¡Disfruta la experiencia! 🚀`,
-                      timestamp: new Date().toISOString()
-                    });
-                  }
-                  return allPosts.reverse().map(post => (
-                    <div key={post.id} style={{
-                      padding: post.system ? '20px' : '14px 20px',
-                      borderBottom: '1px solid var(--wa-border)',
-                      maxWidth: 680,
-                      margin: '0 auto',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      background: post.system ? 'linear-gradient(135deg, rgba(var(--wa-accent-rgb), 0.1) 0%, rgba(0,0,0,0) 100%)' : 'transparent'
-                    }}>
-                      {post.system ? (
-                        <div style={{ textAlign: 'center', position: 'relative' }}>
-                          <button onClick={() => { localStorage.setItem('konek_mundo_welcome_dismissed', 'true'); setMundoPosts([...mundoPosts]); }}
-                            style={{ position: 'absolute', top: -10, right: -10, padding: 5, background: 'none', border: 'none', color: 'var(--wa-text-secondary)', cursor: 'pointer' }}>
-                            <X size={16} />
-                          </button>
-                          <Globe size={32} color="var(--wa-accent)" style={{ marginBottom: 12 }} />
-                          <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: 'var(--wa-text-primary)', lineHeight: 1.5 }}>{post.text}</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                            {!post.anonymous && post.profilePic ? (
-                              <img src={post.profilePic} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: 38, height: 38, borderRadius: '50%', background: post.anonymous ? '#4a5568' : 'var(--wa-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, color: 'white', fontWeight: 700, flexShrink: 0 }}>
-                                {post.anonymous ? '?' : (post.displayName || '?')[0].toUpperCase()}
-                              </div>
-                            )}
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
-                              <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                {memoizedMundoPosts.map(post => (
+                  <div key={post.id} style={{
+                    padding: post.system ? '20px' : '14px 20px',
+                    borderBottom: '1px solid var(--wa-border)',
+                    maxWidth: 680,
+                    margin: '0 auto',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    background: post.system ? 'linear-gradient(135deg, rgba(var(--wa-accent-rgb), 0.1) 0%, rgba(0,0,0,0) 100%)' : 'transparent'
+                  }}>
+                    {post.system ? (
+                      <div style={{ textAlign: 'center', position: 'relative' }}>
+                        <button onClick={() => { localStorage.setItem('konek_mundo_welcome_dismissed', 'true'); setWelcomeDismissed(true); }}
+                          style={{ position: 'absolute', top: -10, right: -10, padding: 5, background: 'none', border: 'none', color: 'var(--wa-text-secondary)', cursor: 'pointer' }}>
+                          <X size={16} />
+                        </button>
+                        <Globe size={32} color="var(--wa-accent)" style={{ marginBottom: 12 }} />
+                        <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: 'var(--wa-text-primary)', lineHeight: 1.5 }}>{post.text}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          {!post.anonymous && post.profilePic ? (
+                            <img src={post.profilePic} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: 38, height: 38, borderRadius: '50%', background: post.anonymous ? '#4a5568' : 'var(--wa-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, color: 'white', fontWeight: 700, flexShrink: 0 }}>
+                              {post.anonymous ? '?' : (post.displayName || '?')[0].toUpperCase()}
                             </div>
-                            {post.userId !== userId && !post.anonymous && (
-                              <button onClick={() => setSelectedMundoUser(post)}
-                                style={{ fontSize: 12, padding: '6px 16px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                                Ver
-                              </button>
-                            )}
+                          )}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
+                            <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                           </div>
+                          {post.userId !== userId && !post.anonymous && (
+                            <button onClick={() => setSelectedMundoUser(post)}
+                              style={{ fontSize: 12, padding: '6px 16px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                              Ver
+                            </button>
+                          )}
+                        </div>
 
-                          <div style={{ paddingLeft: 48 }}>
-                            {post.type === "image" && post.fileInfo && (
-                              <div style={{ marginBottom: 10 }}>
-                                <img src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`}
-                                  style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300, cursor: 'pointer' }}
-                                  onClick={() => setFullscreenImage(`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`)} />
-                              </div>
-                            )}
-                            {post.type === "video" && post.fileInfo && (
-                              <div style={{ marginBottom: 10 }}>
-                                <video src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
-                                  style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300 }} />
-                              </div>
-                            )}
-                            {post.type === "audio" && post.fileInfo && (
-                              <div style={{ marginBottom: 10 }}>
-                                <audio src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
-                                  style={{ height: 40, width: '100%', borderRadius: 8 }} />
-                              </div>
-                            )}
-                            {post.type === "file" && post.fileInfo && (
-                              <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 8 }}>
-                                <FileText size={24} color="#8696a0" />
-                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                  <div style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: 'var(--wa-text-primary)' }}>{post.fileInfo.name}</div>
-                                  <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{(post.fileInfo.size / (1024 * 1024)).toFixed(2)} MB</div>
-                                </div>
-                                <a href={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} download style={{ color: 'var(--wa-accent)' }}>
-                                  <Download size={20} />
-                                </a>
-                              </div>
-                            )}
-                            <p style={{ margin: 0, fontSize: 15, color: 'var(--wa-text-primary)', lineHeight: 1.6 }}>{renderTextWithLinks(post.text)}</p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))
-                })()}
+                        <div style={{ paddingLeft: 48 }}>
+                          {post.type === "image" && post.fileInfo && (
+                            <div style={{ marginBottom: 10 }}>
+                              <img src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`}
+                                style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300, cursor: 'pointer' }}
+                                onClick={() => setFullscreenImage(`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`)} />
+                            </div>
+                          )}
+                          {post.type === "video" && post.fileInfo && (
+                            <div style={{ marginBottom: 10 }}>
+                              <video src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
+                                style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300 }} />
+                            </div>
+                          )}
+                          {post.type === "audio" && post.fileInfo && (
+                            <div style={{ marginBottom: 10 }}>
+                              <audio src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
+                                style={{ height: 40, width: '100%', borderRadius: 8 }} />
+                            </div>
+                          )}
+                          {post.type === "file" && post.fileInfo && (
+                            <div onClick={() => window.open(`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: 'var(--wa-header)', borderRadius: 8, cursor: 'pointer' }}>
+                              <FileText color="var(--wa-accent)" />
+                              <div style={{ fontSize: 13, color: 'var(--wa-text-primary)' }}>{post.fileInfo.name}</div>
+                            </div>
+                          )}
+                          {post.text && (
+                            <div style={{ fontSize: 15, color: 'var(--wa-text-primary)', lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                              {renderTextWithLinks(post.text)}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
               <div style={{ padding: '10px 16px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--wa-header)', alignItems: 'center' }}>
                 <button onClick={() => mundoFileInputRef.current.click()} style={{ background: 'none', border: 'none', color: 'var(--wa-text-secondary)', cursor: 'pointer', padding: 4 }}>
