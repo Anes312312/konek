@@ -30,7 +30,9 @@ import {
   Image as ImageIcon,
   Pencil,
   Gamepad2,
-  Trophy
+  Trophy,
+  Globe,
+  Clock
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
@@ -274,6 +276,38 @@ function App() {
   const [activeChat, setActiveChat] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showIosInstallModal, setShowIosInstallModal] = useState(false);
+
+  // --- Feature: Mensajes Programados ---
+  const [scheduledMessages, setScheduledMessages] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('konek_scheduled') || '[]'); } catch { return []; }
+  });
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleInput, setScheduleInput] = useState('');
+  const [scheduleDateTime, setScheduleDateTime] = useState('');
+
+  // --- Feature: PIN Lock ---
+  const [lockedChats, setLockedChats] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('konek_locked_chats') || '{}'); } catch { return {}; }
+  });
+  const [pinEntry, setPinEntry] = useState(''); // PIN siendo tipeado
+  const [showPinModal, setShowPinModal] = useState(false); // modal de entrada PIN
+  const [pendingLockChat, setPendingLockChat] = useState(null); // chat a bloquear
+  const [showSetPinModal, setShowSetPinModal] = useState(false); // modal para crear PIN
+  const [newPin, setNewPin] = useState('');
+
+  // --- Feature: Reacciones ---
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
+
+  // --- Feature: Mundo ---
+  const [mundoPosts, setMundoPosts] = useState([]);
+  const [mundoInput, setMundoInput] = useState('');
+  const [mundoAnonymous, setMundoAnonymous] = useState(() =>
+    localStorage.getItem('konek_mundo_anon') === 'true'
+  );
+  const [showMundoAnonModal, setShowMundoAnonModal] = useState(() =>
+    localStorage.getItem('konek_mundo_joined') !== 'true'
+  );
+  const [mundoFriendReqSent, setMundoFriendReqSent] = useState({});
 
   // Detectar tipo de dispositivo/plataforma
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -739,7 +773,6 @@ function App() {
 
     socketRef.current.on("typing_start", ({ senderId }) => {
       setTypingUsers((prev) => ({ ...prev, [senderId]: true }));
-      // Auto clear after 3 seconds if stop doesn't arrive
       if (typingTimeoutRef.current[senderId])
         clearTimeout(typingTimeoutRef.current[senderId]);
       typingTimeoutRef.current[senderId] = setTimeout(() => {
@@ -753,10 +786,31 @@ function App() {
         clearTimeout(typingTimeoutRef.current[senderId]);
     });
 
+    // --- Reaction updates ---
+    socketRef.current.on('reaction_update', ({ messageId, reactions }) => {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions } : m));
+    });
+
+    // --- Mundo: historial e incoming posts ---
+    socketRef.current.on('mundo_history', (posts) => setMundoPosts(posts));
+    socketRef.current.on('mundo_new_post', (post) => setMundoPosts(prev => [...prev, post]));
+
+    // --- Solicitud de amistad recibida ---
+    socketRef.current.on('friend_request_received', ({ fromUserId, fromName }) => {
+      if (window.confirm(`\u00bf${fromName} quiere agregarte como contacto. \u00bfAceptar?`)) {
+        setAvailableUsers(prev => {
+          if (prev.find(u => u.id === fromUserId)) return prev;
+          return [...prev, { id: fromUserId, username: fromName, profile_pic: '' }];
+        });
+        socketRef.current.emit('friend_request', { fromUserId: userId, fromName: profile.name, toUserId: fromUserId });
+      }
+    });
+
     socketRef.current.emit("request_statuses");
 
     return () => socketRef.current.disconnect();
   }, [userId]);
+
 
   // Manejar el tiempo de los estados (historias)
   useEffect(() => {
@@ -1098,6 +1152,104 @@ function App() {
     window.location.reload();
   };
 
+  // ===================== MENSAJES PROGRAMADOS =====================
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setScheduledMessages(prev => {
+        const toSend = prev.filter(m => m.sendAt <= now);
+        const remaining = prev.filter(m => m.sendAt > now);
+        toSend.forEach(m => {
+          const msgId = uuidv4();
+          const msg = { id: msgId, sender_id: userId, receiver_id: m.receiverId, content: m.text, type: 'text', timestamp: new Date().toISOString() };
+          socketRef.current.emit('send_message', msg);
+          setMessages(p => [...p, msg]);
+        });
+        if (toSend.length > 0) localStorage.setItem('konek_scheduled', JSON.stringify(remaining));
+        return remaining;
+      });
+    }, 30000); // check every 30s
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  const scheduleMessage = () => {
+    if (!scheduleInput.trim() || !scheduleDateTime || !activeChat) return;
+    const newSched = { id: uuidv4(), receiverId: activeChat.id, text: scheduleInput.trim(), sendAt: new Date(scheduleDateTime).getTime() };
+    const updated = [...scheduledMessages, newSched];
+    setScheduledMessages(updated);
+    localStorage.setItem('konek_scheduled', JSON.stringify(updated));
+    setScheduleInput(''); setScheduleDateTime(''); setShowScheduleModal(false);
+    alert(`Mensaje programado para ${new Date(scheduleDateTime).toLocaleString()}`);
+  };
+
+  // ===================== PIN LOCK =====================
+  const hashPin = async (pin) => {
+    const enc = new TextEncoder().encode(pin);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const saveLockChat = async (chatId, pin) => {
+    const hash = await hashPin(pin);
+    const updated = { ...lockedChats, [chatId]: hash };
+    setLockedChats(updated);
+    localStorage.setItem('konek_locked_chats', JSON.stringify(updated));
+    setNewPin(''); setShowSetPinModal(false);
+    alert('Chat bloqueado con PIN ✅');
+  };
+
+  const unlockChatWithPin = async () => {
+    if (!activeChat) return;
+    const hash = await hashPin(pinEntry);
+    if (hash === lockedChats[activeChat.id]) {
+      const updated = { ...lockedChats };
+      delete updated[activeChat.id];
+      setLockedChats(updated);
+      localStorage.setItem('konek_locked_chats', JSON.stringify(updated));
+      setPinEntry(''); setShowPinModal(false);
+    } else {
+      alert('PIN incorrecto'); setPinEntry('');
+    }
+  };
+
+  // ===================== REACCIONES =====================
+  const sendReaction = (msg, emoji) => {
+    const receiverId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+    socketRef.current.emit('message_reaction', { messageId: msg.id, senderId: userId, receiverId, emoji });
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msg.id) return m;
+      const reactions = m.reactions ? [...m.reactions] : [];
+      const existing = reactions.findIndex(r => r.userId === userId);
+      if (existing !== -1) {
+        if (reactions[existing].emoji === emoji) reactions.splice(existing, 1);
+        else reactions[existing] = { userId, emoji };
+      } else { reactions.push({ userId, emoji }); }
+      return { ...m, reactions };
+    }));
+    setActiveReactionMsgId(null);
+  };
+
+  // ===================== MUNDO =====================
+  const joinMundo = (anonymous) => {
+    setMundoAnonymous(anonymous);
+    localStorage.setItem('konek_mundo_anon', anonymous ? 'true' : 'false');
+    localStorage.setItem('konek_mundo_joined', 'true');
+    setShowMundoAnonModal(false);
+    socketRef.current.emit('get_mundo');
+  };
+
+  const sendMundoPost = () => {
+    if (!mundoInput.trim()) return;
+    socketRef.current.emit('mundo_post', {
+      userId, displayName: profile.name, anonymous: mundoAnonymous, text: mundoInput.trim()
+    });
+    setMundoInput('');
+  };
+
+  const sendFriendRequest = (toUserId, toName) => {
+    socketRef.current.emit('friend_request', { fromUserId: userId, fromName: profile.name, toUserId });
+    setMundoFriendReqSent(prev => ({ ...prev, [toUserId]: true }));
+  };
 
   const deleteChat = (userIdToDelete) => {
     if (
@@ -1649,6 +1801,18 @@ function App() {
             <CircleDashed size={20} />
             <span>ESTADOS</span>
           </div>
+          <div
+            className={`tab-btn ${activeTab === "mundo" ? "active" : ""}`}
+            onClick={() => {
+              setActiveTab("mundo");
+              if (localStorage.getItem('konek_mundo_joined') === 'true') {
+                socketRef.current.emit('get_mundo');
+              }
+            }}
+          >
+            <Globe size={20} />
+            <span>MUNDO</span>
+          </div>
         </div>
 
         {activeTab === "chats" ? (
@@ -2166,6 +2330,50 @@ function App() {
         )}
       </div>
 
+      {/* ===== MUNDO TAB ===== */}
+      {activeTab === 'mundo' && (
+        <div className="sidebar" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {showMundoAnonModal ? (
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+              <Globe size={48} color="var(--wa-accent)" />
+              <h3 style={{ color: 'var(--wa-text-primary)', textAlign: 'center', margin: 0 }}>Bienvenido al Mundo</h3>
+              <p style={{ color: 'var(--wa-text-secondary)', textAlign: 'center', fontSize: 13, margin: 0 }}>Un muro donde todos pueden publicar. ¿Cómo querés aparecer?</p>
+              <button onClick={() => joinMundo(false)} style={{ width: '100%', padding: '14px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>👤 Con mi nombre: {profile.name}</button>
+              <button onClick={() => joinMundo(true)} style={{ width: '100%', padding: '14px', background: '#2a3942', color: 'var(--wa-text-primary)', border: '1px solid var(--wa-border)', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🕵️ Anónimo</button>
+            </div>
+          ) : (
+            <>
+              <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--wa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>Aparecés como: <strong style={{ color: 'var(--wa-text-primary)' }}>{mundoAnonymous ? '🕵️ Anónimo' : `👤 ${profile.name}`}</strong></span>
+                <button onClick={() => { localStorage.removeItem('konek_mundo_joined'); setShowMundoAnonModal(true); }} className="icon-btn" style={{ fontSize: 11, padding: '4px 8px', height: 'auto' }}>Cambiar</button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+                {mundoPosts.length === 0 && <div style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', marginTop: 40, fontSize: 13 }}>No hay publicaciones aún. ¡Sé el primero!</div>}
+                {[...mundoPosts].reverse().map(post => (
+                  <div key={post.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--wa-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: post.anonymous ? '#4a5568' : 'var(--wa-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'white', fontWeight: 700, flexShrink: 0 }}>{post.anonymous ? '?' : (post.displayName || '?')[0].toUpperCase()}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--wa-text-primary)' }}>{post.displayName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                      {post.userId !== userId && !post.anonymous && !availableUsers.find(u => u.id === post.userId) && (
+                        <button onClick={() => sendFriendRequest(post.userId, post.displayName)} disabled={mundoFriendReqSent[post.userId]} style={{ fontSize: 11, padding: '5px 10px', background: mundoFriendReqSent[post.userId] ? '#2a3942' : 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, cursor: mundoFriendReqSent[post.userId] ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{mundoFriendReqSent[post.userId] ? '✓ Enviado' : '➕ Agregar'}</button>
+                      )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--wa-text-primary)', lineHeight: 1.5 }}>{post.text}</p>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0 }}>
+                <input type="text" value={mundoInput} onChange={e => setMundoInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendMundoPost()} placeholder="Escribe algo para el Mundo..." style={{ flex: 1, padding: '10px 14px', borderRadius: 20, border: 'none', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', outline: 'none', fontSize: 13 }} />
+                <button onClick={sendMundoPost} className="icon-btn" style={{ background: 'var(--wa-accent)', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}><Send size={18} color="white" /></button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="chat-window">
         {!activeChat ? (
           <div className="chat-placeholder">
@@ -2297,12 +2505,27 @@ function App() {
                         ? "Desbloquear usuario"
                         : "Bloquear usuario"}
                     </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => { setShowChatMenu(false); setShowSetPinModal(true); }}
+                    >
+                      {lockedChats[activeChat.id] ? '🔓 Quitar PIN del chat' : '🔒 Bloquear chat con PIN'}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="messages-container">
+              {/* Chat bloqueado overlay */}
+              {lockedChats[activeChat.id] && !showPinModal && (
+                <div style={{ position: 'absolute', inset: 0, background: 'var(--wa-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 50 }}>
+                  <div style={{ fontSize: 64 }}>🔒</div>
+                  <h3 style={{ color: 'var(--wa-text-primary)', margin: 0 }}>Chat bloqueado</h3>
+                  <p style={{ color: 'var(--wa-text-secondary)', fontSize: 13, margin: 0 }}>Este chat está protegido con un PIN.</p>
+                  <button onClick={() => setShowPinModal(true)} style={{ padding: '12px 24px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 24, fontWeight: 700, cursor: 'pointer' }}>Desbloquear</button>
+                </div>
+              )}
               {messages
                 .filter(
                   (msg) =>
@@ -2433,8 +2656,35 @@ function App() {
                         />
                       )}
                     </div>
+
+                    {/* Reaction icon + picker */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, opacity: 0.5, padding: '2px 4px', lineHeight: 1 }}
+                        title="Reaccionar"
+                      >😊</button>
+                      {activeReactionMsgId === msg.id && (
+                        <div style={{ position: 'absolute', bottom: '100%', left: 0, background: 'var(--wa-header)', border: '1px solid var(--wa-border)', borderRadius: 20, padding: '6px 10px', display: 'flex', gap: 6, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+                          {['❤️', '😂', '😮', '😢', '👏', '🔥', '👍', '🙏'].map(emoji => (
+                            <span key={emoji} onClick={() => sendReaction(msg, emoji)} style={{ cursor: 'pointer', fontSize: 20, lineHeight: 1, transition: 'transform 0.1s' }} onMouseEnter={e => e.target.style.transform = 'scale(1.3)'} onMouseLeave={e => e.target.style.transform = 'scale(1)'}>{emoji}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Reaction badges */}
+                    {msg.reactions && msg.reactions.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {Object.entries(msg.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})).map(([emoji, count]) => (
+                          <span key={emoji} onClick={() => sendReaction(msg, emoji)} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: '2px 7px', fontSize: 13, cursor: 'pointer', border: msg.reactions.find(r => r.userId === userId && r.emoji === emoji) ? '1px solid var(--wa-accent)' : '1px solid transparent' }}>
+                            {emoji} {count > 1 ? count : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                ))};
+
               {uploadProgress && (
                 <div className="message me" style={{ opacity: 0.8 }}>
                   <div style={{ fontSize: 12, marginBottom: 4 }}>
@@ -2758,9 +3008,14 @@ function App() {
                   </div>
 
                   {input ? (
-                    <button className="icon-btn" onClick={sendMessage}>
-                      <Send size={24} color="#00a884" />
-                    </button>
+                    <>
+                      <button className="icon-btn" onClick={() => setShowScheduleModal(true)} title="Programar envío" style={{ opacity: 0.7 }}>
+                        <Clock size={20} />
+                      </button>
+                      <button className="icon-btn" onClick={sendMessage}>
+                        <Send size={24} color="#00a884" />
+                      </button>
+                    </>
                   ) : (
                     <button className="icon-btn" onClick={startRecording}>
                       <Mic size={24} />
@@ -2774,6 +3029,90 @@ function App() {
       </div>
 
       {/* --- SECCIÓN DE MODALES (Al final para asegurar visibilidad) --- */}
+
+      {/* Modal Programar Mensaje */}
+      {showScheduleModal && (
+        <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
+            <div className="modal-header">
+              <h3>⏰ Programar Mensaje</h3>
+              <button onClick={() => setShowScheduleModal(false)} className="icon-btn">×</button>
+            </div>
+            <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <textarea
+                value={scheduleInput}
+                onChange={e => setScheduleInput(e.target.value)}
+                placeholder="Escribe el mensaje a programar..."
+                rows={3}
+                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, resize: 'none', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+              />
+              <input
+                type="datetime-local"
+                value={scheduleDateTime}
+                onChange={e => setScheduleDateTime(e.target.value)}
+                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' }}
+              />
+              <button onClick={scheduleMessage} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Programar envío</button>
+              {scheduledMessages.filter(m => m.receiverId === activeChat?.id).length > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)', borderTop: '1px solid var(--wa-border)', paddingTop: 10 }}>
+                  <strong>Programados para este chat:</strong>
+                  {scheduledMessages.filter(m => m.receiverId === activeChat?.id).map(m => (
+                    <div key={m.id} style={{ marginTop: 4 }}>💤 "{m.text.substring(0, 30)}..." → {new Date(m.sendAt).toLocaleString()}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal PIN Lock - Entrada */}
+      {showPinModal && activeChat && lockedChats[activeChat.id] && (
+        <div className="modal-overlay">
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
+            <div style={{ padding: '24px 20px' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+              <h3 style={{ color: 'var(--wa-text-primary)', marginBottom: 8 }}>Chat Bloqueado</h3>
+              <p style={{ color: 'var(--wa-text-secondary)', fontSize: 13, marginBottom: 16 }}>Introduce el PIN para acceder</p>
+              <input
+                type="password"
+                maxLength={6}
+                value={pinEntry}
+                onChange={e => setPinEntry(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && unlockChatWithPin()}
+                placeholder="PIN"
+                style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', outline: 'none', marginBottom: 12 }}
+                autoFocus
+              />
+              <button onClick={unlockChatWithPin} style={{ width: '100%', padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Desbloquear</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal PIN Lock - Crear PIN */}
+      {showSetPinModal && activeChat && (
+        <div className="modal-overlay" onClick={() => setShowSetPinModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 300, textAlign: 'center' }}>
+            <div className="modal-header">
+              <h3>🔒 Bloquear Chat</h3>
+              <button onClick={() => setShowSetPinModal(false)} className="icon-btn">×</button>
+            </div>
+            <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input
+                type="password"
+                maxLength={6}
+                value={newPin}
+                onChange={e => setNewPin(e.target.value)}
+                placeholder="Crea un PIN (max 6 dígitos)"
+                style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid var(--wa-border)', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', fontSize: 16, textAlign: 'center', letterSpacing: 4, boxSizing: 'border-box', outline: 'none' }}
+                autoFocus
+              />
+              <button onClick={() => newPin.length >= 4 && saveLockChat(activeChat.id, newPin)} style={{ padding: '12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Confirmar PIN</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal instrucciones instalación iOS */}
       {showIosInstallModal && (

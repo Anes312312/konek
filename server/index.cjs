@@ -19,6 +19,7 @@ const onlineUsers = new Set();     // userIds actualmente conectados
 const deletedIds = new Set();      // IDs eliminados permanentemente
 const messagesList = [];           // Cache en memoria para mensajes (útil para uso local sin bd)
 let statusesList = [];             // Cache en memoria para estados
+const mundoMessages = [];          // Cache para el muro global "Mundo"
 
 // ===== EXPRESS + SOCKET.IO =====
 const app = express();
@@ -545,6 +546,74 @@ io.on('connection', (socket) => {
             io.emit('status_update', s);
             io.emit('status_list', s);
         } catch (e) { }
+    });
+
+    // ==========================================
+    // MUNDO (Muro Global)
+    // ==========================================
+    socket.on('get_mundo', () => {
+        socket.emit('mundo_history', mundoMessages.slice(-100));
+    });
+
+    socket.on('mundo_post', (data) => {
+        try {
+            const post = {
+                id: uuidv4(),
+                userId: data.userId,
+                displayName: data.anonymous ? `Anónimo` : (data.displayName || 'Usuario'),
+                anonymous: data.anonymous || false,
+                text: data.text || '',
+                image: data.image || null,
+                timestamp: new Date().toISOString(),
+                reactions: []
+            };
+            mundoMessages.push(post);
+            if (mundoMessages.length > 200) mundoMessages.splice(0, mundoMessages.length - 200);
+            io.emit('mundo_new_post', post);
+        } catch (e) { console.error('[Mundo]', e.message); }
+    });
+
+    // ==========================================
+    // REACCIONES A MENSAJES
+    // ==========================================
+    socket.on('message_reaction', (data) => {
+        try {
+            const { messageId, senderId, receiverId, emoji } = data;
+            // Update in memory
+            const msg = messagesList.find(m => m.id === messageId);
+            if (msg) {
+                if (!msg.reactions) msg.reactions = [];
+                const existing = msg.reactions.findIndex(r => r.userId === senderId);
+                if (existing !== -1) {
+                    if (msg.reactions[existing].emoji === emoji) {
+                        msg.reactions.splice(existing, 1); // toggle off
+                    } else {
+                        msg.reactions[existing].emoji = emoji; // change
+                    }
+                } else {
+                    msg.reactions.push({ userId: senderId, emoji });
+                }
+                // Broadcast updated reactions to both users
+                const reactionUpdate = { messageId, reactions: msg.reactions };
+                io.to(senderId).emit('reaction_update', reactionUpdate);
+                io.to(receiverId).emit('reaction_update', reactionUpdate);
+            }
+        } catch (e) { console.error('[Reaction]', e.message); }
+    });
+
+    // ==========================================
+    // SOLICITUD DE AMISTAD
+    // ==========================================
+    socket.on('friend_request', (data) => {
+        try {
+            const { fromUserId, fromName, toUserId } = data;
+            if (!fromUserId || !toUserId) return;
+            io.to(toUserId).emit('friend_request_received', {
+                fromUserId,
+                fromName: fromName || 'Un usuario',
+                timestamp: new Date().toISOString()
+            });
+        } catch (e) { console.error('[FriendRequest]', e.message); }
     });
 
     // ==========================================
