@@ -340,6 +340,54 @@ const firestore = {
         }
     },
 
+    // ----- MUNDO (Global Wall) -----
+    async getMundoPosts(limit = 200) {
+        if (!db) return [];
+        try {
+            const snap = await db.collection("mundo")
+                .orderBy("timestamp", "asc")
+                .limitToLast(limit)
+                .get();
+            return snap.docs.map((doc) => {
+                const data = doc.data();
+                return {
+                    ...data,
+                    id: doc.id,
+                    timestamp: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : data.timestamp
+                };
+            });
+        } catch (e) {
+            console.error("[Firestore] getMundoPosts error:", e.message);
+            return [];
+        }
+    },
+
+    async saveMundoPost(id, data) {
+        if (!db || !id) return;
+        try {
+            await db.collection("mundo").doc(String(id)).set({
+                ...data,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        } catch (e) {
+            console.error("[Firestore] saveMundoPost error:", e.message);
+        }
+    },
+
+    async clearMundo() {
+        if (!db) return;
+        try {
+            const snap = await db.collection("mundo").get();
+            if (snap.empty) return;
+            const batch = db.batch();
+            snap.forEach((doc) => batch.delete(doc.ref));
+            await batch.commit();
+            console.log("[Cleanup] Mundo chat vaciado en Firestore");
+        } catch (e) {
+            console.error("[Firestore] clearMundo error:", e.message);
+        }
+    },
+
     // ----- LIMPIEZA -----
     async clearAllCollections() {
         if (!db) return;

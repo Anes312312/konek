@@ -71,6 +71,10 @@ async function loadFromFirestore() {
             });
         });
         console.log(`[Init] ${usersMap.size} usuarios cargados de Firestore`);
+
+        const mundo = await firestore.getMundoPosts();
+        mundoMessages.push(...mundo);
+        console.log(`[Init] ${mundoMessages.length} mensajes de Mundo cargados`);
     } catch (e) {
         console.log('[Init] Firestore no disponible:', e.message);
     }
@@ -256,6 +260,7 @@ io.on('connection', (socket) => {
             mundoMessages.length = 0;
             io.emit('mundo_history', []);
             io.to('admins_room').emit('mundo_status', { isEmpty: true });
+            firestore.clearMundo();
             console.log('[Admin] Chat Mundo vaciado.');
         } catch (e) {
             console.error('[Admin] clear_mundo:', e.message);
@@ -587,6 +592,7 @@ io.on('connection', (socket) => {
             if (mundoMessages.length > 200) mundoMessages.splice(0, mundoMessages.length - 200);
             io.emit('mundo_new_post', post);
             io.to('admins_room').emit('mundo_status', { isEmpty: false });
+            firestore.saveMundoPost(post.id, post);
         } catch (e) { console.error('[Mundo]', e.message); }
     });
 
