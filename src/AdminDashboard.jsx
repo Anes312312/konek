@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw } from 'lucide-react';
+import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw, Globe } from 'lucide-react';
 
 const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? `${window.location.protocol}//${window.location.hostname}:5000`
@@ -88,6 +88,12 @@ function AdminDashboard() {
         setAdminEditingUser(null);
     };
 
+    const adminClearMundo = () => {
+        if (window.confirm('¿VACIAR TODO el chat de Mundo? Esta acción no se puede deshacer.')) {
+            socketRef.current.emit('admin_clear_mundo');
+        }
+    };
+
     return (
         <div className="admin-page">
             <div className="admin-sidebar-nav">
@@ -146,6 +152,16 @@ function AdminDashboard() {
                             <span className="value" style={{ fontSize: '18px', color: isAuthenticated ? '#00a884' : '#ef4444' }}>
                                 {isAuthenticated ? 'Operacional' : 'Sin acceso'}
                             </span>
+                        </div>
+                        <div className="metric-card danger" onClick={adminClearMundo} style={{ cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <span className="label">Chat Mundo</span>
+                                <Globe size={16} color="#ef4444" />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                                <Trash2 size={24} color="#ef4444" />
+                                <span className="value" style={{ fontSize: '16px', color: '#ef4444' }}>VACIAR CHAT</span>
+                            </div>
                         </div>
                     </div>
 

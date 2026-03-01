@@ -249,6 +249,17 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('admin_clear_mundo', () => {
+        try {
+            if (!isAdmin) return;
+            mundoMessages.length = 0;
+            io.emit('mundo_history', []);
+            console.log('[Admin] Chat Mundo vaciado.');
+        } catch (e) {
+            console.error('[Admin] clear_mundo:', e.message);
+        }
+    });
+
     // ==========================================
     // JOIN - Solo usuarios del chat (NO admin)
     // ==========================================

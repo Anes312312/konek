@@ -179,6 +179,16 @@
     color: #00a884;
 }
 
+.metric-card.danger {
+    border-color: rgba(239, 68, 68, 0.3);
+    transition: all 0.2s ease;
+}
+
+.metric-card.danger:hover {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: #ef4444;
+}
+
 .admin-table {
     width: 100%;
     border-collapse: collapse;
