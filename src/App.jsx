@@ -447,6 +447,7 @@ function App() {
   const emitTypingTimeoutRef = useRef(null);
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const activeChatRef = useRef(null);
+  const mundoFileInputRef = useRef(null);
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -949,8 +950,9 @@ function App() {
       const isImage = file.type.startsWith("image/");
       const isAudio =
         file.type.startsWith("audio/") || file.name.endsWith(".webm");
+      const isVideo = file.type.startsWith("video/");
       const finalType =
-        forcedType || (isImage ? "image" : isAudio ? "audio" : "file");
+        forcedType || (isImage ? "image" : isAudio ? "audio" : isVideo ? "video" : "file");
 
       const fileMessage = {
         id: uuidv4(),
@@ -1238,6 +1240,17 @@ function App() {
     socketRef.current.emit('get_mundo');
   };
 
+  const renderTextWithLinks = (text) => {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--wa-accent)', textDecoration: 'underline' }}>{part}</a>;
+      }
+      return part;
+    });
+  };
+
   const sendMundoPost = () => {
     if (!mundoInput.trim()) return;
     socketRef.current.emit('mundo_post', {
@@ -1245,6 +1258,45 @@ function App() {
       text: mundoInput.trim(), profilePic: mundoAnonymous ? '' : (profile.photo || '')
     });
     setMundoInput('');
+  };
+
+  const uploadMundoFile = async (file) => {
+    if (!file) return;
+    const fileId = uuidv4();
+    const totalSize = file.size;
+    const chunkSize = 10 * 1024 * 1024;
+    let start = 0;
+    setUploadProgress({ name: file.name, progress: 0 });
+    try {
+      await axios.post(`${SERVER_URL}/api/upload/init`, { fileName: file.name, totalSize, id: fileId });
+      while (start < totalSize) {
+        const end = Math.min(start + chunkSize, totalSize);
+        const chunk = file.slice(start, end);
+        const formData = new FormData();
+        formData.append("chunk", chunk);
+        formData.append("fileId", fileId);
+        formData.append("fileName", file.name);
+        await axios.post(`${SERVER_URL}/api/upload/chunk`, formData);
+        start = end;
+        setUploadProgress({ name: file.name, progress: Math.round((start / totalSize) * 100) });
+      }
+      const isImage = file.type.startsWith("image/");
+      const isAudio = file.type.startsWith("audio/") || file.name.endsWith(".webm");
+      const isVideo = file.type.startsWith("video/");
+      const finalType = isImage ? "image" : isAudio ? "audio" : isVideo ? "video" : "file";
+      socketRef.current.emit('mundo_post', {
+        userId, displayName: profile.name, anonymous: mundoAnonymous,
+        text: finalType === "audio" ? "Mensaje de voz" : `Envió un archivo: ${file.name}`,
+        type: finalType,
+        profilePic: mundoAnonymous ? '' : (profile.photo || ''),
+        fileInfo: { id: fileId, name: file.name, size: totalSize, path: `${fileId}_${file.name}`, mimeType: file.type }
+      });
+      setUploadProgress(null);
+    } catch (error) {
+      console.error("Error al subir archivo a Mundo:", error);
+      alert("Error al subir el archivo.");
+      setUploadProgress(null);
+    }
   };
 
   const sendFriendRequest = (toUserId, toName) => {
@@ -2376,13 +2428,20 @@ function App() {
           ) : (
             <>
               <div style={{ flex: 1, overflowY: 'auto' }}>
+                {uploadProgress && (
+                  <div style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--wa-border)' }}>
+                    <div style={{ fontSize: 12, marginBottom: 4, color: 'var(--wa-text-primary)' }}>Subiendo: {uploadProgress.name}</div>
+                    <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+                      <div style={{ width: `${uploadProgress.progress}%`, height: '100%', background: 'var(--wa-accent)', borderRadius: 2, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
                 {mundoPosts.length === 0 && (
                   <div style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', marginTop: 60, fontSize: 14 }}>No hay publicaciones aún. ¡Sé el primero!</div>
                 )}
                 {[...mundoPosts].reverse().map(post => (
                   <div key={post.id} style={{ padding: '14px 20px', borderBottom: '1px solid var(--wa-border)', maxWidth: 680, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      {/* Avatar: foto si existe y no es anónimo, inicial si es anónimo */}
                       {!post.anonymous && post.profilePic ? (
                         <img src={post.profilePic} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                       ) : (
@@ -2401,15 +2460,55 @@ function App() {
                         </button>
                       )}
                     </div>
-                    <p style={{ margin: 0, fontSize: 15, color: 'var(--wa-text-primary)', lineHeight: 1.6, paddingLeft: 48 }}>{post.text}</p>
+
+                    <div style={{ paddingLeft: 48 }}>
+                      {post.type === "image" && post.fileInfo && (
+                        <div style={{ marginBottom: 10 }}>
+                          <img src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`}
+                            style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300, cursor: 'pointer' }}
+                            onClick={() => setFullscreenImage(`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`)} />
+                        </div>
+                      )}
+                      {post.type === "video" && post.fileInfo && (
+                        <div style={{ marginBottom: 10 }}>
+                          <video src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
+                            style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 300 }} />
+                        </div>
+                      )}
+                      {post.type === "audio" && post.fileInfo && (
+                        <div style={{ marginBottom: 10 }}>
+                          <audio src={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} controls
+                            style={{ height: 40, width: '100%', borderRadius: 8 }} />
+                        </div>
+                      )}
+                      {post.type === "file" && post.fileInfo && (
+                        <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 8 }}>
+                          <FileText size={24} color="#8696a0" />
+                          <div style={{ flex: 1, overflow: 'hidden' }}>
+                            <div style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: 'var(--wa-text-primary)' }}>{post.fileInfo.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--wa-text-secondary)' }}>{(post.fileInfo.size / (1024 * 1024)).toFixed(2)} MB</div>
+                          </div>
+                          <a href={`${SERVER_URL}/api/download/${post.fileInfo.id}/${post.fileInfo.name}`} download style={{ color: 'var(--wa-accent)' }}>
+                            <Download size={20} />
+                          </a>
+                        </div>
+                      )}
+                      <p style={{ margin: 0, fontSize: 15, color: 'var(--wa-text-primary)', lineHeight: 1.6 }}>{renderTextWithLinks(post.text)}</p>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div style={{ padding: '10px 16px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--wa-header)' }}>
+              <div style={{ padding: '10px 16px', borderTop: '1px solid var(--wa-border)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--wa-header)', alignItems: 'center' }}>
+                <button onClick={() => mundoFileInputRef.current.click()} style={{ background: 'none', border: 'none', color: 'var(--wa-text-secondary)', cursor: 'pointer', padding: 4 }}>
+                  <Paperclip size={24} />
+                </button>
+                <input type="file" ref={mundoFileInputRef} style={{ display: 'none' }} onChange={(e) => { if (e.target.files[0]) uploadMundoFile(e.target.files[0]); e.target.value = ''; }} />
+
                 <input type="text" value={mundoInput} onChange={e => setMundoInput(e.target.value)}
                   onKeyPress={e => e.key === 'Enter' && sendMundoPost()}
                   placeholder="Escribe algo para el Mundo..."
                   style={{ flex: 1, padding: '11px 16px', borderRadius: 24, border: 'none', background: 'var(--wa-input)', color: 'var(--wa-text-primary)', outline: 'none', fontSize: 14 }} />
+
                 <button onClick={sendMundoPost} style={{ background: 'var(--wa-accent)', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <Send size={20} color="white" />
                 </button>

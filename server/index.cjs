@@ -577,6 +577,8 @@ io.on('connection', (socket) => {
                 anonymous: data.anonymous || false,
                 text: data.text || '',
                 image: data.image || null,
+                type: data.type || 'text',
+                fileInfo: data.fileInfo || null,
                 timestamp: new Date().toISOString(),
                 reactions: [],
                 profilePic: data.profilePic || ''
