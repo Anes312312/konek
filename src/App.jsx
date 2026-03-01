@@ -1597,13 +1597,7 @@ function App() {
             >
               <Palette size={20} />
             </button>
-            <button
-              className="icon-btn"
-              onClick={() => setShowLeaderboard(true)}
-              title="Arcade Leaderboard"
-            >
-              <Trophy size={20} />
-            </button>
+
             <button
               className="icon-btn"
               onClick={() => setShowProfileModal(true)}
