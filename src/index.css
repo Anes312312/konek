@@ -204,6 +204,27 @@ body {
   border-top-left-radius: 0;
 }
 
+/* Reaction trigger: show on hover (desktop) */
+.message:hover .reaction-trigger-btn {
+  opacity: 0.7 !important;
+}
+
+.reaction-trigger-btn:hover {
+  opacity: 1 !important;
+}
+
+/* On mobile/touch: always show reaction button slightly */
+@media (hover: none) {
+  .reaction-trigger-btn {
+    opacity: 0.4 !important;
+  }
+}
+
+/* Add bottom margin when reactions are shown to avoid overlap */
+.message:has(.reaction-trigger-btn) {
+  margin-bottom: 2px;
+}
+
 .message-time {
   font-size: 10.5px;
   color: rgba(255, 255, 255, 0.6);

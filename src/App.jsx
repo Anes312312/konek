@@ -2924,26 +2924,77 @@ function App() {
                       )}
                     </div>
 
-                    {/* Reaction icon + picker */}
-                    <div style={{ position: 'relative' }}>
+                    {/* Reaction icon + picker - WhatsApp style at bubble edge */}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: msg.reactions && msg.reactions.length > 0 ? -4 : 2,
+                      ...(msg.sender_id === userId ? { left: -32 } : { right: -32 }),
+                      zIndex: 10
+                    }}>
                       <button
                         onClick={() => setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, opacity: 0.5, padding: '2px 4px', lineHeight: 1 }}
+                        className="reaction-trigger-btn"
+                        style={{
+                          background: 'var(--wa-header)',
+                          border: '1px solid var(--wa-border)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          padding: '3px 5px',
+                          lineHeight: 1,
+                          borderRadius: '50%',
+                          opacity: 0,
+                          transition: 'opacity 0.15s ease',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 26,
+                          height: 26
+                        }}
                         title="Reaccionar"
                       >😊</button>
                       {activeReactionMsgId === msg.id && (
-                        <div style={{ position: 'absolute', bottom: '100%', left: 0, background: 'var(--wa-header)', border: '1px solid var(--wa-border)', borderRadius: 20, padding: '6px 10px', display: 'flex', gap: 6, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '110%',
+                          ...(msg.sender_id === userId ? { right: 0 } : { left: 0 }),
+                          background: 'var(--wa-header)',
+                          border: '1px solid var(--wa-border)',
+                          borderRadius: 20,
+                          padding: '6px 10px',
+                          display: 'flex',
+                          gap: 6,
+                          zIndex: 100,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                          whiteSpace: 'nowrap'
+                        }}>
                           {['❤️', '😂', '😮', '😢', '👏', '🔥', '👍', '🙏'].map(emoji => (
                             <span key={emoji} onClick={() => sendReaction(msg, emoji)} style={{ cursor: 'pointer', fontSize: 20, lineHeight: 1, transition: 'transform 0.1s' }} onMouseEnter={e => e.target.style.transform = 'scale(1.3)'} onMouseLeave={e => e.target.style.transform = 'scale(1)'}>{emoji}</span>
                           ))}
                         </div>
                       )}
                     </div>
-                    {/* Reaction badges */}
+                    {/* Reaction badges - outside bubble bottom */}
                     {msg.reactions && msg.reactions.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                      <div style={{
+                        position: 'absolute',
+                        bottom: -14,
+                        ...(msg.sender_id === userId ? { left: 4 } : { right: 4 }),
+                        display: 'flex',
+                        gap: 3,
+                        zIndex: 5
+                      }}>
                         {Object.entries(msg.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})).map(([emoji, count]) => (
-                          <span key={emoji} onClick={() => sendReaction(msg, emoji)} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: '2px 7px', fontSize: 13, cursor: 'pointer', border: msg.reactions.find(r => r.userId === userId && r.emoji === emoji) ? '1px solid var(--wa-accent)' : '1px solid transparent' }}>
+                          <span key={emoji} onClick={() => sendReaction(msg, emoji)} style={{
+                            background: 'var(--wa-header)',
+                            borderRadius: 12,
+                            padding: '1px 6px',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            border: msg.reactions.find(r => r.userId === userId && r.emoji === emoji) ? '1px solid var(--wa-accent)' : '1px solid var(--wa-border)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                            lineHeight: '18px'
+                          }}>
                             {emoji} {count > 1 ? count : ''}
                           </span>
                         ))}
