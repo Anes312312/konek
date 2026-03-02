@@ -720,7 +720,7 @@ async function start() {
             axios.get('https://konek.fun/api/ping')
                 .then(() => console.log('[AutoPing] Request automatica para evitar que Render se duerma OK'))
                 .catch(err => console.log('[AutoPing] Fallo (normal si el dominio aun no propaga):', err.message));
-        }, 10 * 60 * 1000); // Envía una petición cada 10 minutos
+        }, 4 * 60 * 1000); // Envía una petición cada 4 minutos
     });
 }
 start();

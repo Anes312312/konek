@@ -599,9 +599,20 @@ function App() {
       Notification.requestPermission();
     }
 
-    socketRef.current = io(SERVER_URL);
+    socketRef.current = io(SERVER_URL, {
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 1000,
+      timeout: 20000,
+    });
 
     socketRef.current.emit("join", { userId, profile });
+
+    // Re-join on reconnect to restore session instantly
+    socketRef.current.on("reconnect", () => {
+      socketRef.current.emit("join", { userId, profile });
+    });
 
     socketRef.current.on("receive_message", (message) => {
       // Ignorar mensajes de usuarios bloqueados (usando Ref para evitar cierres obsoletos)
