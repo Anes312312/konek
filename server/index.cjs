@@ -287,6 +287,21 @@ io.on('connection', (socket) => {
                 : (incomingName || existing?.username || 'Usuario');
             const phoneNumber = profile.number ? String(profile.number).trim() : '';
 
+            // Registrar en memoria INMEDIATAMENTE ANTES del await
+            currentUserId = userId;
+            socket.join(userId);
+            onlineUsers.add(userId);
+
+            const userData = {
+                id: userId,
+                username: username,
+                profile_pic: profile.photo || existing?.profile_pic || '',
+                status: profile.description || existing?.status || '',
+                phone_number: phoneNumber || existing?.phone_number || '',
+                role: 'user' // SIEMPRE user, nunca admin
+            };
+            usersMap.set(userId, userData);
+
             // Verificar eliminado
             if (deletedIds.has(userId)) {
                 socket.emit('user_deleted');
@@ -311,22 +326,6 @@ io.on('connection', (socket) => {
                     return;
                 }
             }
-
-            // Registrar en memoria
-            currentUserId = userId;
-            socket.join(userId);
-            onlineUsers.add(userId);
-
-            // existing ya fue definido arriba
-            const userData = {
-                id: userId,
-                username: username,
-                profile_pic: profile.photo || existing?.profile_pic || '',
-                status: profile.description || existing?.status || '',
-                phone_number: phoneNumber || existing?.phone_number || '',
-                role: 'user' // SIEMPRE user, nunca admin
-            };
-            usersMap.set(userId, userData);
 
             // Sync a Firestore (async)
             firestore.saveUser(userId, {
@@ -387,6 +386,7 @@ io.on('connection', (socket) => {
 
             messagesList.push(emit);
 
+            console.log(`[Chat] Emitiendo mensaje de ${senderId} a ${receiverId}`);
             if (msg.receiver_id === 'global') {
                 io.emit('receive_message', emit);
             } else {
@@ -394,6 +394,7 @@ io.on('connection', (socket) => {
                 socket.emit('receive_message', emit);
                 // Emite al que recibe
                 io.to(receiverId).emit('receive_message', emit);
+                console.log(`[Chat] Mensaje emitido a la sala ${receiverId}`);
             }
         } catch (e) {
             console.error('[Chat]', e.message);
