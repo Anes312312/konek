@@ -990,6 +990,14 @@ function App() {
       limit: 50,
       before: oldestMsg?.timestamp,
     });
+
+    // Timeout of 5s fallback in case server doesn't respond
+    setTimeout(() => {
+      if (loadingMoreRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMoreMessages(false);
+      }
+    }, 5000);
   };
 
   const handleMessagesScroll = (e) => {
@@ -1024,12 +1032,24 @@ function App() {
         limit: 50,
       });
 
+      // Timeout de seguridad de 5 segundos: si el servidor no responde o Firestore falla, quitamos el "Cargando..."
+      const historyTimeout = setTimeout(() => {
+        setLoadingChatHistory(false);
+      }, 5000);
+
+      // Guardamos la referencia por si cambiamos de chat y hay que limpiar
+      socketRef.current.once("chat_history", () => {
+        clearTimeout(historyTimeout);
+      });
+
       if (activeChat.id !== "global") {
         socketRef.current.emit("mark_read", {
           readerId: userId,
           senderId: activeChat.id,
         });
       }
+
+      return () => clearTimeout(historyTimeout);
     }
   }, [activeChat, userId]);
 
