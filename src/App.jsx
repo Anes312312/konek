@@ -417,6 +417,11 @@ function App() {
   const [searchNumber, setSearchNumber] = useState("");
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [activeTab, setActiveTab] = useState("chats"); // 'chats' o 'statuses'
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
   const [statuses, setStatuses] = useState([]);
   const [viewingGroup, setViewingGroup] = useState(null);
   const [currentIdx, setCurrentIdx] = useState(0);
