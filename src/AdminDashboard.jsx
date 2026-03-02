@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw, Globe } from 'lucide-react';
 
-const SERVER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? `${window.location.protocol}//${window.location.hostname}:5000`
-    : 'https://konek.fun';
+const SERVER_URL =
+    window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+        ? `${window.location.protocol}//${window.location.hostname}:5000`
+        : `https://${window.location.hostname}`;
 
 function AdminDashboard() {
     const [adminUsers, setAdminUsers] = useState([]);
@@ -17,7 +19,12 @@ function AdminDashboard() {
     const socketRef = useRef();
 
     useEffect(() => {
-        socketRef.current = io(SERVER_URL);
+        socketRef.current = io(SERVER_URL, {
+            reconnectionAttempts: 10,
+            reconnectionDelay: 2000,
+            timeout: 10000,
+            transports: ["websocket", "polling"],
+        });
 
         socketRef.current.on('connect', () => {
             console.log('[Admin] Socket conectado');
