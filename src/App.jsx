@@ -298,6 +298,7 @@ function App() {
 
   // --- Feature: Reacciones ---
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
+  const [loadingChatHistory, setLoadingChatHistory] = useState(false);
 
   // --- Feature: Mundo ---
   const [mundoPosts, setMundoPosts] = useState([]);
@@ -332,8 +333,25 @@ function App() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  // Mostrar botón si: es móvil Y la app no está ya instalada en modo standalone
-  const showInstallButton = isMobile && !isInStandaloneMode;
+  const showInstallButton = isMobile;
+
+  const [unreadMundoCount, setUnreadMundoCount] = useState(0);
+
+  // Pedir permiso para notificaciones al iniciar
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/ringtone.mp3');
+      audio.play().catch(e => console.log("Error al reproducir audio:", e));
+    } catch (e) {
+      console.log("No se pudo reproducir el ringtone");
+    }
+  };
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -354,6 +372,17 @@ function App() {
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
+
+  // Actualizar título con mensajes no leídos
+  useEffect(() => {
+    const totalUnreadPrivate = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+    const total = totalUnreadPrivate + unreadMundoCount;
+    if (total > 0) {
+      document.title = `(${total}) Konek Fun`;
+    } else {
+      document.title = "Konek Fun";
+    }
+  }, [unreadCounts, unreadMundoCount]);
 
   const handleInstallClick = async () => {
     if (isIOS) {
@@ -596,6 +625,8 @@ function App() {
           [message.sender_id]: (prev[message.sender_id] || 0) + 1,
         }));
 
+        playNotificationSound();
+
         // Notificación estilo WhatsApp si el navegador lo soporta
         if ("Notification" in window && Notification.permission === "granted") {
           // Buscamos el nombre del usuario si es posible
@@ -698,6 +729,7 @@ function App() {
         );
       }
       setMessages(filteredHistory);
+      setLoadingChatHistory(false);
     });
 
     socketRef.current.on("user_list", (users) => {
@@ -813,7 +845,13 @@ function App() {
 
     // --- Mundo: historial e incoming posts ---
     socketRef.current.on('mundo_history', (posts) => setMundoPosts(posts));
-    socketRef.current.on('mundo_new_post', (post) => setMundoPosts(prev => [...prev, post]));
+    socketRef.current.on('mundo_new_post', (post) => {
+      setMundoPosts(prev => [...prev, post]);
+      if (activeTabRef.current !== 'mundo' && post.userId !== userId) {
+        setUnreadMundoCount(prev => prev + 1);
+        playNotificationSound();
+      }
+    });
 
     // --- Solicitud de amistad recibida ---
     socketRef.current.on('friend_request_received', ({ fromUserId, fromName }) => {
@@ -891,11 +929,13 @@ function App() {
       }));
 
       if (activeChat.id === "global") {
+        setLoadingChatHistory(true);
         socketRef.current.emit("request_history", {
           userId,
           contactId: "global",
         });
       } else {
+        setLoadingChatHistory(true);
         socketRef.current.emit("request_history", {
           userId,
           contactId: activeChat.id,
@@ -1109,6 +1149,10 @@ function App() {
       const reader = new FileReader();
       reader.onloadend = () => {
         if (file.type === "image/gif") {
+          if (file.size > 2 * 1024 * 1024) {
+            alert("El GIF es demasiado grande (máximo 2MB).");
+            return;
+          }
           setProfile((prev) => ({ ...prev, photo: reader.result }));
           return;
         }
@@ -1155,6 +1199,7 @@ function App() {
 
   const saveProfile = () => {
     // Sincronizar con el servidor
+    // Para GIFs grandes, mostramos un pequeño feedback y cerramos
     socketRef.current.emit("update_profile", { userId, profile });
     setShowProfileModal(false);
   };
@@ -1872,9 +1917,15 @@ function App() {
           <div
             className={`tab-btn ${activeTab === "chats" ? "active" : ""}`}
             onClick={() => setActiveTab("chats")}
+            style={{ position: 'relative' }}
           >
             <MessageCircle size={20} />
             <span>CHATS</span>
+            {Object.values(unreadCounts).reduce((a, b) => a + b, 0) > 0 && (
+              <div style={{ position: 'absolute', top: 5, right: '15%', background: '#ff3b30', color: 'white', borderRadius: '50%', minWidth: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', padding: '0 4px' }}>
+                {Object.values(unreadCounts).reduce((a, b) => a + b, 0)}
+              </div>
+            )}
           </div>
           <div
             className={`tab-btn ${activeTab === "statuses" ? "active" : ""}`}
@@ -1890,13 +1941,20 @@ function App() {
             className={`tab-btn ${activeTab === "mundo" ? "active" : ""}`}
             onClick={() => {
               setActiveTab("mundo");
+              setUnreadMundoCount(0);
               if (localStorage.getItem('konek_mundo_joined') === 'true') {
                 socketRef.current.emit('get_mundo');
               }
             }}
+            style={{ position: 'relative' }}
           >
             <Globe size={20} />
             <span>MUNDO</span>
+            {unreadMundoCount > 0 && (
+              <div style={{ position: 'absolute', top: 5, right: '15%', background: 'var(--wa-accent)', color: 'white', borderRadius: '50%', minWidth: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', padding: '0 4px' }}>
+                {unreadMundoCount}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2713,7 +2771,12 @@ function App() {
               </div>
             </div>
 
-            <div className="messages-container">
+            <div className="messages-container" style={{ position: 'relative' }}>
+              {loadingChatHistory && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, color: 'var(--wa-text-secondary)' }}>
+                  Cargando...
+                </div>
+              )}
               {/* Chat bloqueado overlay */}
               {lockedChats[activeChat.id] && !showPinModal && (
                 <div style={{ position: 'absolute', inset: 0, background: 'var(--wa-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 50 }}>
