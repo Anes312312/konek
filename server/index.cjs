@@ -451,7 +451,7 @@ io.on('connection', (socket) => {
 
     socket.on('request_history', async (data) => {
         try {
-            const { userId, contactId } = data || {};
+            const { userId, contactId, limit = 50, before } = data || {};
             if (!userId) return;
             let msgs = [];
             if (!contactId || contactId === 'global') {
@@ -464,9 +464,20 @@ io.on('connection', (socket) => {
                 );
                 if (msgs.length === 0) msgs = await firestore.getPrivateMessages(userId, contactId);
             }
-            socket.emit('chat_history', { contactId, messages: msgs });
+            // Sort by timestamp descending
+            msgs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            // Apply cursor: only messages before the given timestamp
+            if (before) {
+                const beforeTime = new Date(before).getTime();
+                msgs = msgs.filter(m => new Date(m.timestamp).getTime() < beforeTime);
+            }
+            // Limit results
+            const limited = msgs.slice(0, limit);
+            // Send back in chronological order (oldest first)
+            limited.reverse();
+            socket.emit('chat_history', { contactId, messages: limited, hasMore: msgs.length > limit });
         } catch (e) {
-            socket.emit('chat_history', { contactId: data?.contactId, messages: [] });
+            socket.emit('chat_history', { contactId: data?.contactId, messages: [], hasMore: false });
         }
     });
 

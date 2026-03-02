@@ -551,10 +551,17 @@ function App() {
 
   const socketRef = useRef();
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const profilePhotoInputRef = useRef();
   const statusInputRef = useRef();
   const blockedUsersRef = useRef(blockedUsers);
   const clearedChatsRef = useRef(clearedChats);
+
+  // --- Message cache & pagination ---
+  const messageCacheRef = useRef({}); // { contactId: messages[] }
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     blockedUsersRef.current = blockedUsers;
@@ -621,6 +628,15 @@ function App() {
         return [...prev, message];
       });
 
+      // Keep message cache in sync
+      const cacheKey = message.sender_id === userId ? message.receiver_id : message.sender_id;
+      if (cacheKey && messageCacheRef.current[cacheKey]) {
+        const cache = messageCacheRef.current[cacheKey];
+        if (!cache.find(m => m.id === message.id)) {
+          messageCacheRef.current[cacheKey] = [...cache, message];
+        }
+      }
+
       // Incrementar contador de no leídos si no es el chat activo
       if (
         message.sender_id !== userId &&
@@ -649,13 +665,17 @@ function App() {
                 body: bodyText,
                 icon: "/icon-192.png",
                 vibrate: [200, 100, 200],
-                tag: "konek-message",
+                tag: `konek-msg-${message.sender_id}`,
+                renotify: true,
+                data: { url: '/' },
               });
             });
           } else {
             new Notification(contactName, {
               body: bodyText,
               vibrate: [200, 100, 200],
+              tag: `konek-msg-${message.sender_id}`,
+              renotify: true,
             });
           }
         }
@@ -726,7 +746,7 @@ function App() {
       }
     });
 
-    socketRef.current.on("chat_history", ({ contactId, messages: history }) => {
+    socketRef.current.on("chat_history", ({ contactId, messages: history, hasMore }) => {
       const clears = clearedChatsRef.current;
       let filteredHistory = history;
       if (contactId && clears[contactId]) {
@@ -735,7 +755,24 @@ function App() {
           (m) => new Date(m.timestamp).getTime() > clearTime,
         );
       }
-      setMessages(filteredHistory);
+
+      if (loadingMoreRef.current) {
+        // Pagination: prepend older messages
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const newOld = filteredHistory.filter(m => !existingIds.has(m.id));
+          const merged = [...newOld, ...prev];
+          if (contactId) messageCacheRef.current[contactId] = merged;
+          return merged;
+        });
+        loadingMoreRef.current = false;
+        setLoadingMoreMessages(false);
+      } else {
+        // Initial load or chat switch
+        if (contactId) messageCacheRef.current[contactId] = filteredHistory;
+        setMessages(filteredHistory);
+      }
+      setHasMoreMessages(!!hasMore);
       setLoadingChatHistory(false);
     });
 
@@ -924,8 +961,32 @@ function App() {
   }, [statuses]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    // Don't auto-scroll when loading older messages (pagination)
+    if (!loadingMoreMessages) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, loadingMoreMessages]);
+
+  // --- Load more messages (scroll up) ---
+  const loadMoreMessages = () => {
+    if (!activeChat || !socketRef.current || loadingMoreRef.current || !hasMoreMessages) return;
+    loadingMoreRef.current = true;
+    setLoadingMoreMessages(true);
+    const oldestMsg = messages[0];
+    socketRef.current.emit("request_history", {
+      userId,
+      contactId: activeChat.id === "global" ? "global" : activeChat.id,
+      limit: 50,
+      before: oldestMsg?.timestamp,
+    });
+  };
+
+  const handleMessagesScroll = (e) => {
+    const container = e.target;
+    if (container.scrollTop < 60 && hasMoreMessages && !loadingMoreRef.current) {
+      loadMoreMessages();
+    }
+  };
 
   useEffect(() => {
     if (activeChat && socketRef.current) {
@@ -935,18 +996,24 @@ function App() {
         [activeChat.id]: 0,
       }));
 
-      if (activeChat.id === "global") {
-        setLoadingChatHistory(true);
-        socketRef.current.emit("request_history", {
-          userId,
-          contactId: "global",
-        });
+      // Use cached messages if available for instant switch
+      const cached = messageCacheRef.current[activeChat.id];
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+        setHasMoreMessages(cached.length >= 50);
+        setLoadingChatHistory(false);
       } else {
         setLoadingChatHistory(true);
-        socketRef.current.emit("request_history", {
-          userId,
-          contactId: activeChat.id,
-        });
+      }
+
+      // Always fetch fresh from server (will update cache)
+      socketRef.current.emit("request_history", {
+        userId,
+        contactId: activeChat.id === "global" ? "global" : activeChat.id,
+        limit: 50,
+      });
+
+      if (activeChat.id !== "global") {
         socketRef.current.emit("mark_read", {
           readerId: userId,
           senderId: activeChat.id,
@@ -2778,7 +2845,12 @@ function App() {
               </div>
             </div>
 
-            <div className="messages-container" style={{ position: 'relative' }}>
+            <div className="messages-container" ref={messagesContainerRef} onScroll={handleMessagesScroll} style={{ position: 'relative' }}>
+              {loadingMoreMessages && (
+                <div style={{ textAlign: 'center', padding: '10px 0', color: 'var(--wa-text-secondary)', fontSize: 12 }}>
+                  Cargando mensajes anteriores...
+                </div>
+              )}
               {loadingChatHistory && (
                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, color: 'var(--wa-text-secondary)' }}>
                   Cargando...
