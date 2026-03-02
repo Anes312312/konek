@@ -373,16 +373,7 @@ function App() {
     };
   }, []);
 
-  // Actualizar título con mensajes no leídos
-  useEffect(() => {
-    const totalUnreadPrivate = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
-    const total = totalUnreadPrivate + unreadMundoCount;
-    if (total > 0) {
-      document.title = `(${total}) Konek Fun`;
-    } else {
-      document.title = "Konek Fun";
-    }
-  }, [unreadCounts, unreadMundoCount]);
+
 
   const handleInstallClick = async () => {
     if (isIOS) {
@@ -489,6 +480,17 @@ function App() {
   const [showContactProfile, setShowContactProfile] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [isLinking, setIsLinking] = useState(false);
+
+  // Actualizar título con mensajes no leídos
+  useEffect(() => {
+    const totalUnreadPrivate = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+    const total = totalUnreadPrivate + unreadMundoCount;
+    if (total > 0) {
+      document.title = `(${total}) Konek Fun`;
+    } else {
+      document.title = "Konek Fun";
+    }
+  }, [unreadCounts, unreadMundoCount]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     const setupDone = localStorage.getItem("konek_setup_done");
     const isActuallyNew = !setupDone || setupDone !== "true";
