@@ -1,4 +1,4 @@
-const CACHE_NAME = 'konek-v8';
+const CACHE_NAME = 'konek-v9';
 const urlsToCache = [
     '/',
     '/index.html',

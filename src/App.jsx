@@ -607,10 +607,8 @@ function App() {
       timeout: 20000,
     });
 
-    socketRef.current.emit("join", { userId, profile });
-
-    // Re-join on reconnect to restore session instantly
-    socketRef.current.on("reconnect", () => {
+    // Re-join on connect (initial and reconnect) to restore session instantly
+    socketRef.current.on("connect", () => {
       socketRef.current.emit("join", { userId, profile });
     });
 
@@ -767,24 +765,34 @@ function App() {
         );
       }
 
-      if (loadingMoreRef.current) {
-        // Pagination: prepend older messages
-        setMessages(prev => {
-          const existingIds = new Set(prev.map(m => m.id));
-          const newOld = filteredHistory.filter(m => !existingIds.has(m.id));
-          const merged = [...newOld, ...prev];
-          if (contactId) messageCacheRef.current[contactId] = merged;
-          return merged;
-        });
-        loadingMoreRef.current = false;
-        setLoadingMoreMessages(false);
+      const currentActive = activeChatRef.current?.id || null;
+      const isGlobal = contactId === "global";
+
+      if (currentActive === contactId || (isGlobal && currentActive === "global")) {
+        if (loadingMoreRef.current) {
+          // Pagination: prepend older messages
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.id));
+            const newOld = filteredHistory.filter(m => !existingIds.has(m.id));
+            const merged = [...newOld, ...prev];
+            if (contactId) messageCacheRef.current[contactId] = merged;
+            return merged;
+          });
+          loadingMoreRef.current = false;
+          setLoadingMoreMessages(false);
+        } else {
+          // Initial load or chat switch
+          if (contactId) messageCacheRef.current[contactId] = filteredHistory;
+          setMessages(filteredHistory);
+        }
+        setHasMoreMessages(!!hasMore);
+        setLoadingChatHistory(false);
       } else {
-        // Initial load or chat switch
-        if (contactId) messageCacheRef.current[contactId] = filteredHistory;
-        setMessages(filteredHistory);
+        // Cache silently without disrupting the current UI if it's an old response
+        if (contactId && !loadingMoreRef.current) {
+          messageCacheRef.current[contactId] = filteredHistory;
+        }
       }
-      setHasMoreMessages(!!hasMore);
-      setLoadingChatHistory(false);
     });
 
     socketRef.current.on("user_list", (users) => {
