@@ -31,6 +31,14 @@ const io = new Server(server, {
     pingInterval: 25000
 });
 
+// Forzar HTTPS en producción
+app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] === 'http') {
+        return res.redirect(`https://${req.get('host')}${req.url}`);
+    }
+    next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
