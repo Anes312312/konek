@@ -262,6 +262,55 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ==========================================
+    // ADMIN: Descargar Chat de Usuario
+    // ==========================================
+    socket.on('admin_download_chat', async (data, callback) => {
+        try {
+            if (!isAdmin || !data?.userId) {
+                if (callback) callback({ success: false, error: 'No autorizado' });
+                return;
+            }
+            const targetId = data.userId;
+            const privateMsgs = await firestore.getAllUserMessages(targetId);
+            const mundoMsgs = await firestore.getUserMundoPosts(targetId);
+
+            const formatMsg = (m) => {
+                const senderName = m.sender_name || (usersMap.get(m.sender_id)?.username) || 'Desconocido';
+                const receiverName = m.receiver_id === 'global' ? 'Mundo' : (usersMap.get(m.receiver_id)?.username) || 'Desconocido';
+                const time = m.timestamp ? new Date(m.timestamp).toLocaleString() : 'Fecha desconocida';
+                const type = m.message_type || m.type || 'text';
+                const content = type === 'text' ? m.content : `[${type.toUpperCase()}] ${m.file_name || m.content}`;
+                return `[${time}] ${senderName} a ${receiverName}: ${content}`;
+            };
+
+            const formatMundo = (m) => {
+                const senderName = m.displayName || (usersMap.get(m.userId)?.username) || 'Desconocido';
+                const time = m.timestamp ? new Date(m.timestamp).toLocaleString() : 'Fecha desconocida';
+                const type = m.message_type || m.type || 'text';
+                const content = type === 'text' ? (m.text || m.content) : `[${type.toUpperCase()}] ${m.file_name || m.content || m.text}`;
+                return `[${time}] ${senderName} a MUNDO: ${content}`;
+            };
+
+            const lines = [];
+            lines.push(`Historial de Usuario: ${usersMap.get(targetId)?.username || targetId}`);
+            lines.push(`Generado el: ${new Date().toLocaleString()}\n`);
+            lines.push(`--- CHATS PRIVADOS ---`);
+            if (privateMsgs.length === 0) lines.push("No hay mensajes privados.");
+            else privateMsgs.forEach(m => lines.push(formatMsg(m)));
+
+            lines.push(`\n--- PUBLICACIONES EN MUNDO ---`);
+            if (mundoMsgs.length === 0) lines.push("No hay publicaciones en Mundo.");
+            else mundoMsgs.forEach(m => lines.push(formatMundo(m)));
+
+            const textContent = lines.join('\n');
+            if (callback) callback({ success: true, text: textContent });
+        } catch (e) {
+            console.error('[Admin] download_chat:', e.message);
+            if (callback) callback({ success: false, error: e.message });
+        }
+    });
+
     socket.on('admin_clear_mundo', () => {
         try {
             if (!isAdmin) return;

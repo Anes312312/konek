@@ -241,6 +241,53 @@ const SERVER_URL =
     ? `${window.location.protocol}//${window.location.hostname}:5000`
     : "https://konek.fun";
 
+const renderMessageText = (text) => {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      if (part.includes('youtube.com/watch') || part.includes('youtu.be/')) {
+        let videoId = '';
+        if (part.includes('youtube.com/watch')) {
+          try { videoId = new URL(part).searchParams.get('v'); } catch (e) { }
+        } else if (part.includes('youtu.be/')) {
+          videoId = part.split('youtu.be/')[1].split('?')[0];
+        }
+        if (videoId) {
+          return (
+            <div key={i} style={{ marginTop: 8, display: 'flex', flexDirection: 'column' }}>
+              <a href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#53bdeb', textDecoration: 'underline', marginBottom: 4, wordBreak: 'break-all' }}>{part}</a>
+              <iframe
+                width="100%"
+                height="200"
+                src={`https://www.youtube.com/embed/${videoId}`}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ borderRadius: 8, marginTop: 4 }}
+              ></iframe>
+            </div>
+          );
+        }
+      }
+      if (part.match(/\.(mp4|webm|ogg)$/i)) {
+        return (
+          <div key={i} style={{ marginTop: 8, display: 'flex', flexDirection: 'column' }}>
+            <a href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#53bdeb', textDecoration: 'underline', marginBottom: 4, wordBreak: 'break-all' }}>{part}</a>
+            <video controls style={{ width: '100%', borderRadius: 8, maxHeight: 200, marginTop: 4 }}>
+              <source src={part} />
+            </video>
+          </div>
+        );
+      }
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#53bdeb', textDecoration: 'underline', wordBreak: 'break-all' }}>{part}</a>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -2289,6 +2336,7 @@ function App() {
                                 width: "100%",
                                 height: "100%",
                                 objectFit: "cover",
+                                borderRadius: "50%",
                               }}
                             />
                           ) : (
@@ -3014,7 +3062,7 @@ function App() {
                     ) : msg.type === "game" ? (
                       renderGameMessage(msg)
                     ) : (
-                      <span>{msg.content}</span>
+                      <span>{renderMessageText(msg.content)}</span>
                     )}
 
                     <div className="message-time">

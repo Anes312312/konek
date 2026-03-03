@@ -143,6 +143,27 @@ const firestore = {
         }
     },
 
+    async getAllUserMessages(userId) {
+        if (!db || !userId) return [];
+        try {
+            const snap1 = await db.collection('messages').where('sender_id', '==', userId).get();
+            const snap2 = await db.collection('messages').where('receiver_id', '==', userId).get();
+
+            const messages = new Map();
+            snap1.forEach(doc => messages.set(doc.id, { id: doc.id, ...doc.data() }));
+            snap2.forEach(doc => messages.set(doc.id, { id: doc.id, ...doc.data() }));
+
+            return Array.from(messages.values()).sort((a, b) => {
+                const t1 = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
+                const t2 = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
+                return t1 - t2;
+            });
+        } catch (e) {
+            console.error('[Firestore] getAllUserMessages error:', e.message);
+            return [];
+        }
+    },
+
     async getGlobalMessages() {
         if (!db) return [];
         try {
@@ -358,6 +379,24 @@ const firestore = {
             });
         } catch (e) {
             console.error("[Firestore] getMundoPosts error:", e.message);
+            return [];
+        }
+    },
+
+    async getUserMundoPosts(userId) {
+        if (!db || !userId) return [];
+        try {
+            const snap = await db.collection("mundo").where("userId", "==", userId).get();
+            return snap.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    ...data,
+                    id: doc.id,
+                    timestamp: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : data.timestamp
+                };
+            }).sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+        } catch (e) {
+            console.error("[Firestore] getUserMundoPosts error:", e.message);
             return [];
         }
     },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw, Globe } from 'lucide-react';
+import { User, Settings, Trash2, UserPlus, ShieldCheck, LogOut, CircleDot, RefreshCw, Globe, Download } from 'lucide-react';
 
 const SERVER_URL =
     window.location.hostname === "localhost" ||
@@ -90,6 +90,25 @@ function AdminDashboard() {
         if (window.confirm('¿ELIMINAR este usuario permanentemente?')) {
             socketRef.current.emit('admin_delete_user', { userId: targetId });
         }
+    };
+
+    const adminDownloadChat = (targetId) => {
+        if (!socketRef.current) return;
+        socketRef.current.emit('admin_download_chat', { userId: targetId }, (res) => {
+            if (res?.success && res.text) {
+                const blob = new Blob([res.text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `chat_${targetId}_${new Date().getTime()}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert("Error al descargar el chat: " + (res?.error || "Desconocido"));
+            }
+        });
     };
 
     const adminUpdateUser = (targetUser, updates) => {
@@ -226,6 +245,9 @@ function AdminDashboard() {
                                             </td>
                                             <td>
                                                 <div className="action-btns">
+                                                    <button className="edit-btn" style={{ backgroundColor: '#00a884', color: '#fff' }} title="Descargar Historial" onClick={() => adminDownloadChat(u.id)}>
+                                                        <Download size={18} />
+                                                    </button>
                                                     <button className="edit-btn" title="Editar" onClick={() => setAdminEditingUser({ ...u })}>
                                                         <Settings size={18} />
                                                     </button>
