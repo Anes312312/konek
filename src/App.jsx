@@ -1026,6 +1026,45 @@ function App() {
     }
   }, [statuses]);
 
+  // Ref to track seen statuses so we only notify on truly NEW ones in this session
+  const previousStatusIdsRef = useRef(new Set());
+
+  // Efecto para detectar cuando llega un ESTADO nuevo y mandar notificación
+  useEffect(() => {
+    if (statuses.length === 0) return;
+
+    // Si es la primera carga (Set vacío) lo llenamos sin notificar
+    if (previousStatusIdsRef.current.size === 0) {
+      previousStatusIdsRef.current = new Set(statuses.map(s => s.id));
+      return;
+    }
+
+    const currentIds = new Set(statuses.map(s => s.id));
+    const newStatuses = statuses.filter(s =>
+      s.user_id !== userId && !previousStatusIdsRef.current.has(s.id) && !viewedStatuses.includes(s.id)
+    );
+
+    if (newStatuses.length > 0) {
+      playNotificationSound();
+
+      if ("Notification" in window && Notification.permission === "granted") {
+        const contactName = availableUsers.find(u => u.id === newStatuses[0].user_id)?.username || newStatuses[0].username || "Un contacto";
+        try {
+          new Notification('Nuevo estado', {
+            body: `${contactName} ha publicado un estado.`,
+            icon: '/icon-192.png',
+            tag: `status-${newStatuses[0].id}`,
+            silent: true // The sound is played via playNotificationSound()
+          });
+        } catch (e) {
+          console.log("Error mostrando notificacion push:", e);
+        }
+      }
+    }
+
+    previousStatusIdsRef.current = currentIds;
+  }, [statuses, userId, viewedStatuses, availableUsers]);
+
   useEffect(() => {
     // Don't auto-scroll when loading older messages (pagination)
     if (!loadingMoreMessages) {
@@ -2093,9 +2132,15 @@ function App() {
               setActiveTab("statuses");
               socketRef.current.emit("request_statuses");
             }}
+            style={{ position: 'relative' }}
           >
             <CircleDashed size={20} />
             <span>ESTADOS</span>
+            {statuses.filter(s => s.user_id !== userId && !viewedStatuses.includes(s.id)).length > 0 && (
+              <div style={{ position: 'absolute', top: 5, right: '15%', background: '#ff3b30', color: 'white', borderRadius: '50%', minWidth: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', padding: '0 4px' }}>
+                {statuses.filter(s => s.user_id !== userId && !viewedStatuses.includes(s.id)).length}
+              </div>
+            )}
           </div>
           <div
             className={`tab-btn ${activeTab === "mundo" ? "active" : ""}`}
