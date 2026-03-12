@@ -33,7 +33,9 @@ import {
   Trophy,
   Globe,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  FileVideo,
+  Play
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
@@ -3076,32 +3078,89 @@ function App() {
                           style={{ height: "40px", width: "100%", display: "block", borderRadius: "8px" }}
                         />
                       </div>
+                    ) : msg.type === "video" ? (
+                      <div className="video-message">
+                        <video
+                          src={`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`}
+                          controls
+                          preload="metadata"
+                          playsInline
+                          style={{
+                            width: "100%",
+                            maxHeight: "300px",
+                            borderRadius: "8px",
+                            display: "block",
+                            background: "#000",
+                          }}
+                        />
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: 6,
+                          padding: "0 2px",
+                        }}>
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 11,
+                            color: "rgba(255,255,255,0.6)",
+                          }}>
+                            <FileVideo size={14} />
+                            <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {msg.file_info.name}
+                            </span>
+                            <span>
+                              ({msg.file_info.size < 1024 * 1024
+                                ? (msg.file_info.size / 1024).toFixed(1) + " KB"
+                                : msg.file_info.size < 1024 * 1024 * 1024
+                                  ? (msg.file_info.size / (1024 * 1024)).toFixed(2) + " MB"
+                                  : (msg.file_info.size / (1024 * 1024 * 1024)).toFixed(2) + " GB"
+                              })
+                            </span>
+                          </div>
+                          <a
+                            href={`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`}
+                            download
+                            className="video-download-btn"
+                            title="Descargar video"
+                          >
+                            <Download size={16} />
+                          </a>
+                        </div>
+                      </div>
                     ) : msg.type === "file" ? (
-                      <div className="file-message">
-                        <FileText size={32} color="#8696a0" />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14 }}>
+                      <div className="enhanced-file-message">
+                        <div className="enhanced-file-icon">
+                          <FileText size={28} color="#aebac1" />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {msg.file_info.name}
                           </div>
-                          <div
-                            style={{
-                              fontSize: 11,
-                              color: "rgba(255,255,255,0.6)",
-                            }}
-                          >
-                            {(
-                              msg.file_info.size /
-                              (1024 * 1024 * 1024)
-                            ).toFixed(2)}{" "}
-                            GB
+                          <div style={{
+                            fontSize: 11,
+                            color: "rgba(255,255,255,0.5)",
+                            marginTop: 2,
+                          }}>
+                            {msg.file_info.size < 1024
+                              ? msg.file_info.size + " B"
+                              : msg.file_info.size < 1024 * 1024
+                                ? (msg.file_info.size / 1024).toFixed(1) + " KB"
+                                : msg.file_info.size < 1024 * 1024 * 1024
+                                  ? (msg.file_info.size / (1024 * 1024)).toFixed(2) + " MB"
+                                  : (msg.file_info.size / (1024 * 1024 * 1024)).toFixed(2) + " GB"
+                            }
                           </div>
                         </div>
                         <a
                           href={`${SERVER_URL}/api/download/${msg.file_info.id}/${msg.file_info.name}`}
                           download
-                          className="icon-btn"
+                          className="enhanced-file-download-btn"
+                          title="Descargar archivo"
                         >
-                          <Download size={20} />
+                          <Download size={18} />
                         </a>
                       </div>
                     ) : msg.type === "game" ? (

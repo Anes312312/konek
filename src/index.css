@@ -317,6 +317,87 @@ body {
   border-radius: 4px;
 }
 
+/* Video Message Styles */
+.video-message {
+  padding: 2px;
+  position: relative;
+  max-width: 320px;
+  width: 100%;
+}
+
+.video-message video {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.video-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 168, 132, 0.2);
+  color: var(--wa-accent);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.video-download-btn:hover {
+  background: var(--wa-accent);
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 10px rgba(0, 168, 132, 0.4);
+}
+
+/* Enhanced File Message Styles */
+.enhanced-file-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  margin-bottom: 4px;
+  min-width: 220px;
+}
+
+.enhanced-file-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(134, 150, 160, 0.2), rgba(134, 150, 160, 0.08));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.enhanced-file-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(0, 168, 132, 0.15);
+  color: var(--wa-accent);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.enhanced-file-download-btn:hover {
+  background: var(--wa-accent);
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 10px rgba(0, 168, 132, 0.4);
+}
+
 /* Emoji Picker Styles */
 .emoji-picker {
   position: absolute;
