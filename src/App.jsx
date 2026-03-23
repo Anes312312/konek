@@ -451,12 +451,25 @@ function App() {
       return [];
     }
   });
+  const [allUsers, setAllUsers] = useState([]);
+  const [temporaryChats, setTemporaryChats] = useState(() => {
+    try {
+      const savedTemp = localStorage.getItem("konek_temporary_chats");
+      return savedTemp ? JSON.parse(savedTemp) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("konek_temporary_chats", JSON.stringify(temporaryChats));
+  }, [temporaryChats]);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [searchNumber, setSearchNumber] = useState("");
   const [showChatMenu, setShowChatMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState("chats"); // 'chats' o 'statuses'
+  const [activeTab, setActiveTab] = useState("chats"); // 'contactos', 'chats' o 'statuses'
   const activeTabRef = useRef(activeTab);
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -748,32 +761,31 @@ function App() {
         });
       }
 
-      // Si el remitente no está en nuestros contactos, añadirlo automáticamente
+      // Si el remitente no está en nuestros contactos, añadirlo a chats temporales
       if (message.sender_id !== userId && message.sender_id !== "global") {
-        setAvailableUsers((prev) => {
-          const exists = prev.find((u) => u.id === message.sender_id);
-          if (exists) {
-            // Si ya existe, actualizamos su información por si cambió
-            return prev.map((u) =>
-              u.id === message.sender_id
-                ? {
-                  ...u,
-                  username: message.sender_name,
-                  profile_pic: message.sender_pic,
-                  phone_number: message.sender_phone,
-                }
-                : u,
-            );
-          }
-
-          const newContact = {
-            id: message.sender_id,
-            username: message.sender_name,
-            profile_pic: message.sender_pic,
-            phone_number: message.sender_phone,
-          };
-          return [...prev, newContact];
-        });
+        const isContact = availableUsers.some(u => u.id === message.sender_id);
+        if (!isContact) {
+          setTemporaryChats(prev => {
+            const exists = prev.find(u => u.id === message.sender_id);
+            if (exists) return prev;
+            return [...prev, {
+              id: message.sender_id,
+              username: message.sender_name,
+              profile_pic: message.sender_pic,
+              phone_number: message.sender_phone
+            }];
+          });
+        } else {
+          // Si ya es contacto, opcionalmente actualizar su info
+          setAvailableUsers(prev => prev.map(u => 
+            u.id === message.sender_id ? {
+              ...u,
+              username: message.sender_name,
+              profile_pic: message.sender_pic,
+              phone_number: message.sender_phone
+            } : u
+          ));
+        }
       }
     });
 
@@ -845,6 +857,9 @@ function App() {
     });
 
     socketRef.current.on("user_list", (users) => {
+      // Actualizar la lista global de usuarios (excluyendome a mi)
+      setAllUsers(users.filter(u => u.id !== userId));
+
       // Actualizar la lista de contactos locales: Eliminar los que ya no existen en el servidor
       setAvailableUsers((prev) => {
         // Mantenemos solo los usuarios que el servidor nos envía o el chat global
@@ -857,6 +872,14 @@ function App() {
             const updatedUser = users.find((u) => u.id === contact.id);
             return updatedUser ? updatedUser : contact;
           });
+      });
+      
+      // Actualizar chats temporales si el usuario cambió de info
+      setTemporaryChats(prev => {
+        return prev.map(temp => {
+          const updated = users.find(u => u.id === temp.id);
+          return updated ? { ...temp, username: updated.username, profile_pic: updated.profile_pic } : temp;
+        });
       });
 
       // Si el chat activo fue el usuario eliminado, lo cerramos
@@ -1582,6 +1605,20 @@ function App() {
     setMundoFriendReqSent(prev => ({ ...prev, [toUserId]: true }));
   };
 
+  const addContact = (user) => {
+    setAvailableUsers((prev) => {
+      const exists = prev.find((u) => u.id === user.id);
+      if (exists) return prev;
+      return [...prev, {
+        id: user.id,
+        username: user.username || user.name || `Usuario ${user.id.slice(0, 4)}`,
+        profile_pic: user.profile_pic || "",
+        phone_number: user.phone_number || ""
+      }];
+    });
+    setTemporaryChats((prev) => prev.filter((u) => u.id !== user.id));
+  };
+
   const deleteChat = (userIdToDelete) => {
     if (
       window.confirm(
@@ -1616,6 +1653,7 @@ function App() {
       const now = new Date().toISOString();
       setClearedChats((prev) => ({ ...prev, [userIdToDelete]: now }));
       setAvailableUsers((prev) => prev.filter((u) => u.id !== userIdToDelete));
+      setTemporaryChats((prev) => prev.filter((u) => u.id !== userIdToDelete));
       setMessages((prev) =>
         prev.filter(
           (msg) =>
@@ -2116,6 +2154,13 @@ function App() {
         {/* Navegación por Pestañas */}
         <div className="tab-navigation">
           <div
+            className={`tab-btn ${activeTab === "contactos" ? "active" : ""}`}
+            onClick={() => setActiveTab("contactos")}
+          >
+            <Users size={20} />
+            <span>CONTACTOS</span>
+          </div>
+          <div
             className={`tab-btn ${activeTab === "chats" ? "active" : ""}`}
             onClick={() => setActiveTab("chats")}
             style={{ position: 'relative' }}
@@ -2165,6 +2210,45 @@ function App() {
           </div>
         </div>
 
+        {activeTab === "contactos" && (
+          <div className="contact-list-container" style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ padding: '15px 16px', fontSize: 13, color: 'var(--wa-text-secondary)', borderBottom: '1px solid var(--wa-border)' }}>
+              Directorio de Usuarios ({allUsers.length})
+            </div>
+            {allUsers.length === 0 ? (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--wa-text-secondary)' }}>
+                No hay otros usuarios conectados
+              </div>
+            ) : (
+              allUsers.map(user => {
+                const isSaved = availableUsers.some(u => u.id === user.id);
+                return (
+                  <div key={user.id} className="chat-item" onClick={() => { setActiveChat({ id: user.id, name: user.username }); setActiveTab('chats'); }}>
+                    <div className="avatar" style={{ background: '#6a7175', borderRadius: '50%', width: 40, height: 40, marginRight: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {user.profile_pic ? <img src={user.profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{user.username}</span>
+                        {!isSaved && (
+                          <button 
+                            style={{ background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 12, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); addContact(user); }}
+                          >
+                            Agregar
+                          </button>
+                        )}
+                        {isSaved && <span style={{ fontSize: 10, color: '#25d366' }}>Agendado</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--wa-text-secondary)' }}>ID: {user.id.slice(0, 8)}...</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {activeTab === "chats" && (
           <>
             <div className="search-container">
@@ -2203,7 +2287,7 @@ function App() {
                 Mis Conversaciones
               </div>
 
-              {availableUsers.length === 0 && (
+              {availableUsers.length === 0 && temporaryChats.length === 0 && (
                 <div
                   style={{
                     padding: "20px",
@@ -2212,12 +2296,11 @@ function App() {
                     fontSize: 13,
                   }}
                 >
-                  No tienes chats abiertos. Ingresa un número arriba para
-                  empezar.
+                  No tienes chats abiertos. Ingresa un número arriba o busca en la pestaña de Contactos.
                 </div>
               )}
 
-              {availableUsers.map((user) => (
+              {[...availableUsers, ...temporaryChats].map((user) => (
                 <div
                   key={user.id}
                   className={`chat-item ${activeChat?.id === user.id ? "active" : ""}`}
@@ -2259,7 +2342,12 @@ function App() {
                         justifyContent: "space-between",
                       }}
                     >
-                      <span style={{ fontWeight: 500 }}>{contactAliases[user.id] || user.username}</span>
+                      <span style={{ fontWeight: 500 }}>
+                        {contactAliases[user.id] || user.username}
+                        {!availableUsers.some(u => u.id === user.id) && user.id !== 'global' && (
+                           <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--wa-accent)', fontStyle: 'italic' }}>(Temporal)</span>
+                        )}
+                      </span>
                       {blockedUsers.includes(user.id) && (
                         <span
                           style={{
@@ -2288,7 +2376,7 @@ function App() {
                           color: "var(--wa-text-secondary)",
                         }}
                       >
-                        #{user.phone_number}
+                        #{user.phone_number || "Desconocido"}
                       </div>
                       <div
                         style={{
@@ -2325,9 +2413,14 @@ function App() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteContact(user.id);
+                            if (availableUsers.some(u => u.id === user.id)) {
+                              deleteContact(user.id);
+                            } else {
+                              setTemporaryChats(prev => prev.filter(u => u.id !== user.id));
+                              if (activeChat?.id === user.id) setActiveChat(null);
+                            }
                           }}
-                          title="Eliminar contacto"
+                          title="Eliminar chat"
                         >
                           <Trash2 size={16} color="#ef4444" />
                         </button>
@@ -2997,6 +3090,22 @@ function App() {
                   <h3 style={{ color: 'var(--wa-text-primary)', margin: 0 }}>Chat bloqueado</h3>
                   <p style={{ color: 'var(--wa-text-secondary)', fontSize: 13, margin: 0 }}>Este chat está protegido con un PIN.</p>
                   <button onClick={() => setShowPinModal(true)} style={{ padding: '12px 24px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 24, fontWeight: 700, cursor: 'pointer' }}>Desbloquear</button>
+                </div>
+              )}
+              {activeChat && activeChat.id !== 'global' && !availableUsers.some(u => u.id === activeChat.id) && (
+                <div style={{ background: 'var(--wa-header)', padding: '12px 20px', margin: '10px 16px', borderRadius: 8, border: '1px solid var(--wa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
+                  <div style={{ fontSize: 13, color: 'var(--wa-text-secondary)' }}>
+                    Este usuario no est&aacute; en tus contactos.
+                  </div>
+                  <button 
+                    style={{ background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => {
+                        const tempUser = temporaryChats.find(u => u.id === activeChat.id) || allUsers.find(u => u.id === activeChat.id);
+                        if (tempUser) addContact(tempUser);
+                    }}
+                  >
+                    Agendar
+                  </button>
                 </div>
               )}
               {messages
