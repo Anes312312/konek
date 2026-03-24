@@ -529,6 +529,14 @@ io.on('connection', (socket) => {
                 const beforeTime = new Date(before).getTime();
                 msgs = msgs.filter(m => new Date(m.timestamp).getTime() < beforeTime);
             }
+            
+            // Filtrar mensajes borrados
+            msgs = msgs.filter(m => {
+                if (m.is_deleted_for_all) return true; // Se mantiene en historial para mostrar "mensaje borrado"
+                if (m.deleted_for && m.deleted_for.includes(userId)) return false; // Borrado 'para mí'
+                return true;
+            });
+
             // Limit results
             const limited = msgs.slice(0, limit);
             // Send back in chronological order (oldest first)
@@ -536,6 +544,90 @@ io.on('connection', (socket) => {
             socket.emit('chat_history', { contactId, messages: limited, hasMore: msgs.length > limit });
         } catch (e) {
             socket.emit('chat_history', { contactId: data?.contactId, messages: [], hasMore: false });
+        }
+    });
+
+    socket.on('delete_message', async (data) => {
+        try {
+            const { messageId, type, userId } = data;
+            if (!messageId || !type || !userId) return;
+
+            const msgIndex = messagesList.findIndex(m => m.id === messageId);
+            let msgObj = null;
+
+            if (msgIndex !== -1) {
+                msgObj = messagesList[msgIndex];
+                if (type === 'me') {
+                    msgObj.deleted_for = msgObj.deleted_for || [];
+                    if (!msgObj.deleted_for.includes(userId)) {
+                        msgObj.deleted_for.push(userId);
+                    }
+                } else if (type === 'everyone') {
+                    if (msgObj.sender_id === userId) {
+                        msgObj.is_deleted_for_all = true;
+                        msgObj.content = '';
+                        msgObj.file_info = null;
+                        msgObj.type = 'text';
+                    } else {
+                        return; // No autorizado
+                    }
+                }
+            }
+
+            await firestore.deleteMessageLogic(messageId, userId, type, msgObj);
+            io.emit('message_deleted', { messageId, type, userId, updatedMessage: msgObj });
+        } catch (e) {
+            console.error('[Delete]', e.message);
+        }
+    });
+
+    socket.on('forward_message', async (data) => {
+        try {
+            const { originalMessage, receiverId, senderId } = data;
+            if (!originalMessage || !receiverId || !senderId) return;
+
+            const msgId = uuidv4();
+            const msg = {
+                sender_id: senderId,
+                receiver_id: receiverId,
+                content: originalMessage.content || '',
+                message_type: originalMessage.type || 'text',
+                file_name: originalMessage.file_info?.name || '',
+                file_url: originalMessage.file_info?.path || '',
+                read: false,
+                is_forwarded: true
+            };
+
+            const emit = {
+                id: msgId,
+                read: false,
+                ...msg,
+                timestamp: new Date().toISOString(),
+                type: msg.message_type,
+                file_info: originalMessage.file_info,
+                gameType: originalMessage.gameType,
+                gameData: originalMessage.gameData,
+                is_forwarded: true
+            };
+
+            const senderData = usersMap.get(senderId);
+            if (senderData) {
+                emit.sender_name = senderData.username;
+                emit.sender_pic = senderData.profile_pic;
+                emit.sender_phone = senderData.phone_number;
+            }
+
+            firestore.saveMessage(msgId, msg).catch(() => { });
+            messagesList.push(emit);
+
+            if (receiverId === 'global') {
+                io.emit('receive_message', emit);
+            } else {
+                socket.emit('receive_message', emit);
+                io.to(receiverId).emit('receive_message', emit);
+            }
+        } catch (e) {
+            console.error('[Forward]', e.message);
         }
     });
 

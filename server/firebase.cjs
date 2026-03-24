@@ -231,6 +231,36 @@ const firestore = {
         }
     },
 
+    async deleteMessageLogic(messageId, userId, type, memoryObj) {
+        if (!db || !messageId) return;
+        try {
+            const docRef = db.collection('messages').doc(String(messageId));
+            const doc = await docRef.get();
+            if (!doc.exists) return;
+            const data = doc.data();
+            
+            if (type === 'me') {
+                const deleted_for = data.deleted_for || [];
+                if (!deleted_for.includes(userId)) {
+                    deleted_for.push(userId);
+                    await docRef.update({ deleted_for });
+                }
+            } else if (type === 'everyone') {
+                // Solo el remitente o admin pueden borrar para todos
+                if (data.sender_id === userId || data.role === 'admin') {
+                    await docRef.update({
+                        is_deleted_for_all: true,
+                        content: '',
+                        file_url: null,
+                        message_type: 'text'
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[Firestore] deleteMessageLogic error:', e.message);
+        }
+    },
+
     // ----- ESTADOS -----
     async getStatuses() {
         if (!db) return [];

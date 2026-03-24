@@ -396,7 +396,8 @@ function App() {
 
   const playNotificationSound = () => {
     try {
-      const audio = new Audio('/ringtone.mp3');
+      const audioUrl = profile.notification_tone || '/ringtone.mp3';
+      const audio = new Audio(audioUrl);
       audio.play().catch(e => console.log("Error al reproducir audio:", e));
     } catch (e) {
       console.log("No se pudo reproducir el ringtone");
@@ -498,6 +499,12 @@ function App() {
     }
   });
   const [editingAlias, setEditingAlias] = useState(false);
+
+  // --- Feature: Message Management (Delete / Forward) ---
+  const [msgActionMenu, setMsgActionMenu] = useState(null); // ID del mensaje para menú contextual
+  const [forwardModal, setForwardModal] = useState(null); // Mensaje a reenviar
+
+  const ringtoneInputRef = useRef(null);
   const [aliasInput, setAliasInput] = useState("");
   const [stickers, setStickers] = useState(() => {
     const saved = localStorage.getItem("konek_custom_stickers");
@@ -866,6 +873,23 @@ function App() {
       }
     });
 
+    socketRef.current.on("message_deleted", ({ messageId, type, userId: deleterId, updatedMessage }) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId) {
+           if (type === 'everyone') {
+             return { ...msg, ...updatedMessage, is_deleted_for_all: true, content: '', type: 'text' };
+           } else if (type === 'me' && deleterId === userId) {
+             return { ...msg, deleted_for: [...(msg.deleted_for || []), deleterId] };
+           }
+        }
+        return msg;
+      }).filter(msg => {
+        // Automatically hide it if it's deleted for "me"
+        if (msg.deleted_for && msg.deleted_for.includes(userId)) return false;
+        return true;
+      }));
+    });
+
     socketRef.current.on("user_list", (users) => {
       // Actualizar la lista global de usuarios (excluyendome a mi)
       setAllUsers(users.filter(u => u.id !== userId));
@@ -930,10 +954,9 @@ function App() {
           prev.name && prev.name !== "Mi Usuario" && prev.name !== "Usuario";
         const descriptionIsDefault = 
           !prev.description || prev.description === "¡Usando Konek Fun!";
-        return {
+          
+        const newProfile = {
           ...prev,
-          // Si el servidor tiene un nombre real, usarlo (prioridad al servidor)
-          // Si no, mantener el nombre local si es real
           name: hasRealServerName
             ? serverName
             : hasRealLocalName
@@ -942,10 +965,17 @@ function App() {
           role: userData.role,
           number: userData.phone_number || prev.number,
           photo: prev.photo ? prev.photo : (userData.profile_pic || null),
+          // Respetar el tono local si existe
+          notification_tone: prev.notification_tone || null,
           description: descriptionIsDefault && userData.status ? userData.status : prev.description,
         };
+        
+        // Guardar silenciosamente para asegurar que los datos del servidor queden locales (y persistir la foto de perfil)
+        localStorage.setItem("konek_profile", JSON.stringify(newProfile));
+        
+        return newProfile;
       });
-      // Si el servidor dice que ya tiene nombre real, quitamos onboarding
+      
       if (
         userData.username &&
         userData.username !== "Mi Usuario" &&
@@ -3134,6 +3164,8 @@ function App() {
                   <div
                     key={msg.id}
                     className={`message ${msg.sender_id === userId ? "me" : "other"}`}
+                    onContextMenu={(e) => { e.preventDefault(); setMsgActionMenu(msg.id); }}
+                    style={{ position: 'relative' }}
                   >
                     <div
                       style={{
@@ -3145,7 +3177,30 @@ function App() {
                     >
                       {msg.sender_id === userId ? profile.name : (contactAliases[msg.sender_id] || activeChat.name)}
                     </div>
-                    {msg.type === "sticker" ? (
+                    {msgActionMenu === msg.id && (
+                       <div className="msg-action-menu" style={{ 
+                         right: msg.sender_id === userId ? 10 : 'auto', 
+                         left: msg.sender_id !== userId ? 10 : 'auto' 
+                       }}>
+                           <div className="msg-action-item" onClick={() => { setForwardModal(msg); setMsgActionMenu(null); }}>Reenviar</div>
+                           <div className="msg-action-item" onClick={() => {
+                               socketRef.current.emit('delete_message', { messageId: msg.id, type: 'me', userId });
+                               setMsgActionMenu(null);
+                           }}>Eliminar para mí</div>
+                           {msg.sender_id === userId && (
+                               <div className="msg-action-item danger" onClick={() => {
+                                   socketRef.current.emit('delete_message', { messageId: msg.id, type: 'everyone', userId });
+                                   setMsgActionMenu(null);
+                               }}>Eliminar para todos</div>
+                           )}
+                           <div className="msg-action-item" style={{ color: 'rgba(255,255,255,0.5)' }} onClick={() => setMsgActionMenu(null)}>Cancelar</div>
+                       </div>
+                    )}
+                    {msg.is_deleted_for_all ? (
+                       <div style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic', fontSize: 13, paddingTop: 4 }}>
+                         🚫 Este mensaje fue eliminado
+                       </div>
+                    ) : msg.type === "sticker" ? (
                       <div
                         style={{
                           padding: "2px",
@@ -3983,6 +4038,41 @@ function App() {
         )
       }
 
+      {/* Modal Reenviar Mensaje */}
+      {forwardModal && (
+        <div className="modal-overlay" onClick={() => setForwardModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div className="modal-header" style={{ padding: '15px' }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Reenviar mensaje</h3>
+              <button onClick={() => setForwardModal(null)} className="icon-btn">×</button>
+            </div>
+            <div style={{ padding: '10px 15px', borderBottom: '1px solid var(--wa-border)', fontSize: '13px', color: 'var(--wa-text-secondary)', fontStyle: 'italic', background: 'var(--wa-bg-header)' }}>
+              Selecciona el contacto al que deseas reenviar este mensaje.
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {[...availableUsers, ...temporaryChats].map((c) => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid var(--wa-border)', transition: 'background 0.2s' }} onClick={() => {
+                  socketRef.current.emit('forward_message', { message: forwardModal, receiverId: c.id, senderId: userId });
+                  setForwardModal(null);
+                  setActiveTab('chats');
+                  setActiveChat({ id: c.id, name: c.username });
+                }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--wa-input-bg)'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#6a7175', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                    {c.profile_pic ? <img src={c.profile_pic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User color="white" />}
+                  </div>
+                  <div style={{ marginLeft: 15, fontWeight: 500, color: 'var(--wa-text-primary)' }}>
+                    {contactAliases[c.id] || c.username}
+                  </div>
+                </div>
+              ))}
+              {[...availableUsers, ...temporaryChats].length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--wa-text-secondary)' }}>No tienes contactos para reenviar.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Perfil */}
       {
         showProfileModal && (
@@ -4107,6 +4197,45 @@ function App() {
                       setProfile({ ...profile, description: e.target.value })
                     }
                   />
+                </div>
+
+                <div className="input-group">
+                  <label>Tono de notificación (Personalizado)</label>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setProfile({ ...profile, notification_tone: reader.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    style={{ background: 'var(--wa-input-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--wa-border)', width: '100%', color: 'var(--wa-text-primary)' }}
+                  />
+                  {profile.notification_tone && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <button onClick={(e) => {
+                        e.preventDefault();
+                        const audio = new Audio(profile.notification_tone);
+                        audio.play();
+                      }} style={{ padding: '6px 12px', background: 'var(--wa-accent)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: 13 }}>
+                        ▶ Reproducir
+                      </button>
+                      <button onClick={(e) => {
+                        e.preventDefault();
+                        setProfile({ ...profile, notification_tone: null });
+                      }} style={{ padding: '6px 12px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: 13 }}>
+                        ⚠️ Quitar
+                      </button>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 11, color: "var(--wa-text-secondary)", marginTop: 8, lineHeight: 1.4 }}>
+                    Elige un tono mp3/wav en tu dispositivo. Solo se usará de manera local para tus notificaciones.
+                  </p>
                 </div>
 
                 <button className="save-btn" onClick={saveProfile}>

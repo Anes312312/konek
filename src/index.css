@@ -1338,4 +1338,47 @@ body {
     width: 90vw;
     left: 5vw;
   }
+
+  .tab-btn {
+    padding: 10px 4px;
+    font-size: 11px;
+    gap: 4px;
+    flex-direction: column;
+  }
+
+  .tab-btn span {
+    font-size: 10px;
+  }
+
+  /* Fix para controles de audio en mobile */
+  audio {
+    height: 35px !important;
+    width: 220px !important;
+  }
+}
+
+/* Modales y menú contextual de mensajes */
+.msg-action-menu {
+  position: absolute;
+  background: var(--wa-header);
+  border: 1px solid var(--wa-border);
+  border-radius: 8px;
+  padding: 5px 0;
+  z-index: 1000;
+  top: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  min-width: 150px;
+}
+.msg-action-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--wa-text-primary);
+  transition: background 0.2s;
+}
+.msg-action-item:hover {
+  background: var(--wa-input-bg);
+}
+.msg-action-item.danger {
+  color: #ef4444;
 }
