@@ -305,7 +305,8 @@ function App() {
   const [profile, setProfile] = useState(() => {
     try {
       const savedProfile = localStorage.getItem("konek_profile");
-      return savedProfile
+      const savedTone = localStorage.getItem("konek_notification_tone") || null;
+      const base = savedProfile
         ? JSON.parse(savedProfile)
         : {
           name: "Mi Usuario",
@@ -313,6 +314,8 @@ function App() {
           photo: null,
           number: "",
         };
+      // Reintegrar el tono guardado por separado
+      return { ...base, notification_tone: savedTone };
     } catch (e) {
       console.error("Error parsing profile from localStorage", e);
       return {
@@ -320,9 +323,11 @@ function App() {
         description: "¡Usando Konek Fun!",
         photo: null,
         number: "",
+        notification_tone: null,
       };
     }
   });
+
 
   const [activeChat, setActiveChat] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -609,11 +614,26 @@ function App() {
     // Solo guardar si el perfil tiene datos válidos (evitar resetear con valores iniciales vacíos si el componente se monta/desmonta)
     if (profile && profile.name) {
       try {
-        localStorage.setItem("konek_profile", JSON.stringify(profile));
+        // Excluir notification_tone del perfil - se guarda en su propia clave para evitar exceder el límite
+        const { notification_tone, ...profileToSave } = profile;
+        localStorage.setItem("konek_profile", JSON.stringify(profileToSave));
+        // Guardar tono por separado
+        if (notification_tone) {
+          try {
+            localStorage.setItem("konek_notification_tone", notification_tone);
+          } catch (toneErr) {
+            // El archivo de audio es demasiado grande para localStorage
+            alert('El archivo de audio es demasiado grande para guardarlo (máximo ~4MB). Prueba con un archivo más corto.');
+            setProfile(prev => ({ ...prev, notification_tone: null }));
+            localStorage.removeItem("konek_notification_tone");
+          }
+        } else {
+          localStorage.removeItem("konek_notification_tone");
+        }
       } catch (e) {
         console.error("Error saving profile to localStorage:", e);
         if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-          alert('Tu imagen de perfil es muy grande y no se pudo guardar localmente. Por favor, intenta con una imagen con menor tamaño o borra conversaciones antiguas.');
+          alert('Tu foto de perfil es muy grande y no se pudo guardar localmente. Por favor, usa una imagen más pequeña.');
           // Removemos la imagen gigante para que no rompa futuros guardados
           setProfile(prev => ({ ...prev, photo: null }));
         }
