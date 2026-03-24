@@ -2214,14 +2214,14 @@ function App() {
         {activeTab === "contactos" && (
           <div className="contact-list-container" style={{ flex: 1, overflowY: 'auto' }}>
             <div style={{ padding: '15px 16px', fontSize: 13, color: 'var(--wa-text-secondary)', borderBottom: '1px solid var(--wa-border)' }}>
-              Directorio de Usuarios ({allUsers.length})
+              Mis Contactos
             </div>
-            {allUsers.length === 0 ? (
+            {[...availableUsers, ...temporaryChats].length === 0 ? (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--wa-text-secondary)' }}>
-                No hay otros usuarios conectados
+                Aún no tienes contactos.
               </div>
             ) : (
-              allUsers.map(user => {
+              [...availableUsers, ...temporaryChats].map(user => {
                 const isSaved = availableUsers.some(u => u.id === user.id);
                 return (
                   <div key={user.id} className="chat-item" onClick={() => { setActiveChat({ id: user.id, name: user.username }); setActiveTab('chats'); }}>
