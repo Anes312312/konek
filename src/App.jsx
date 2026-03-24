@@ -4258,14 +4258,112 @@ function App() {
                   <input
                     type="file"
                     accept="audio/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setProfile(prev => ({ ...prev, notification_tone: reader.result }));
-                        };
-                        reader.readAsDataURL(file);
+                        try {
+                          const MAX_DURATION = 5; // Segundos m\u00e1ximos para el ringtone
+                          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                          const arrayBuffer = await file.arrayBuffer();
+                          const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                          
+                          // Si el audio es corto, lo dejamos tal cual
+                          if (decodedBuffer.duration <= MAX_DURATION) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setProfile(prev => ({ ...prev, notification_tone: reader.result }));
+                            reader.readAsDataURL(file);
+                            return;
+                          }
+
+                          // Si es largo, recortamos los primeros 5 seg
+                          const sampleRate = decodedBuffer.sampleRate;
+                          const length = MAX_DURATION * sampleRate;
+                          const trimmedBuffer = audioCtx.createBuffer(
+                            decodedBuffer.numberOfChannels,
+                            length,
+                            sampleRate
+                          );
+
+                          for (let i = 0; i < decodedBuffer.numberOfChannels; i++) {
+                            const channelData = decodedBuffer.getChannelData(i);
+                            const trimmedChannelData = trimmedBuffer.getChannelData(i);
+                            trimmedChannelData.set(channelData.slice(0, length));
+                          }
+
+                          // Convertir el buffer recortado a un DataURL (v\u00eda WAV para compatibilidad)
+                          const wavBlob = await new Promise(resolve => {
+                            const worker = new Worker(URL.createObjectURL(new Blob([`
+                              self.onmessage = function(e) {
+                                const buffer = e.data;
+                                const length = buffer.length * buffer.numberOfChannels * 2 + 44;
+                                const out = new ArrayBuffer(length);
+                                const view = new DataView(out);
+                                const sampleRate = buffer.sampleRate;
+                                const channels = buffer.numberOfChannels;
+
+                                /* RIFF identifier */
+                                writeString(view, 0, 'RIFF');
+                                /* file length */
+                                view.setUint32(4, 36 + buffer.length * channels * 2, true);
+                                /* RIFF type */
+                                writeString(view, 8, 'WAVE');
+                                /* format chunk identifier */
+                                writeString(view, 12, 'fmt ');
+                                /* format chunk length */
+                                view.setUint32(16, 16, true);
+                                /* sample format (raw) */
+                                view.setUint16(20, 1, true);
+                                /* channel count */
+                                view.setUint16(22, channels, true);
+                                /* sample rate */
+                                view.setUint32(24, sampleRate, true);
+                                /* byte rate (sample rate * block align) */
+                                view.setUint32(28, sampleRate * channels * 2, true);
+                                /* block align (channel count * bytes per sample) */
+                                view.setUint16(32, channels * 2, true);
+                                /* bits per sample */
+                                view.setUint16(34, 16, true);
+                                /* data chunk identifier */
+                                writeString(view, 36, 'data');
+                                /* data chunk length */
+                                view.setUint32(40, buffer.length * channels * 2, true);
+
+                                let offset = 44;
+                                for (let i = 0; i < buffer.length; i++) {
+                                  for (let channel = 0; channel < channels; channel++) {
+                                    const s = Math.max(-1, Math.min(1, buffer.data[channel][i]));
+                                    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                                    offset += 2;
+                                  }
+                                }
+                                self.postMessage(new Blob([view], { type: 'audio/wav' }));
+                              }
+                              function writeString(view, offset, string) {
+                                for (let i = 0; i < string.length; i++) {
+                                  view.setUint8(offset + i, string.charCodeAt(i));
+                                }
+                              }
+                            `], { type: 'application/javascript' })));
+                            worker.onmessage = (e) => resolve(e.data);
+                            const channelData = [];
+                            for (let i = 0; i < trimmedBuffer.numberOfChannels; i++) {
+                              channelData.push(trimmedBuffer.getChannelData(i));
+                            }
+                            worker.postMessage({
+                              numberOfChannels: trimmedBuffer.numberOfChannels,
+                              sampleRate: trimmedBuffer.sampleRate,
+                              length: trimmedBuffer.length,
+                              data: channelData
+                            });
+                          });
+
+                          const reader = new FileReader();
+                          reader.onloadend = () => setProfile(prev => ({ ...prev, notification_tone: reader.result }));
+                          reader.readAsDataURL(wavBlob);
+                        } catch (err) {
+                          console.error("Error al recortar audio:", err);
+                          alert("No se pudo procesar el audio. Intenta con un archivo m\u00e1s corto.");
+                        }
                       }
                     }}
                     style={{ background: 'var(--wa-input-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--wa-border)', width: '100%', color: 'var(--wa-text-primary)' }}
