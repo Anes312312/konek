@@ -3194,26 +3194,20 @@ function App() {
                       msg.receiver_id === userId),
                 )
                 .map((msg) => {
-                  // Long-press para mobile
-                  let longPressTimer = null;
-                  const handleTouchStart = () => {
-                    longPressTimer = setTimeout(() => {
-                      setMsgActionMenu(msg.id);
-                    }, 500);
-                  };
-                  const handleTouchEnd = () => {
-                    if (longPressTimer) clearTimeout(longPressTimer);
-                  };
-
                   return (
                   <div
                     key={msg.id}
                     className={`message ${msg.sender_id === userId ? "me" : "other"}`}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMsgActionMenu(msg.id); }}
-                    onTouchStart={handleTouchStart}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchMove={handleTouchEnd}
-                    style={{ position: 'relative' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMsgActionMenu(prev => prev === msg.id ? null : msg.id);
+                    }}
+                    onContextMenu={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      setMsgActionMenu(msg.id); 
+                    }}
+                    style={{ position: 'relative', cursor: 'pointer' }}
                   >
                     <div
                       style={{
@@ -4106,7 +4100,7 @@ function App() {
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {[...availableUsers, ...temporaryChats].map((c) => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid var(--wa-border)', transition: 'background 0.2s' }} onClick={() => {
-                  socketRef.current.emit('forward_message', { message: forwardModal, receiverId: c.id, senderId: userId });
+                  socketRef.current.emit('forward_message', { originalMessage: forwardModal, receiverId: c.id, senderId: userId });
                   setForwardModal(null);
                   setActiveTab('chats');
                   setActiveChat({ id: c.id, name: c.username });
