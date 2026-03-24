@@ -405,9 +405,15 @@ function App() {
 
   const playNotificationSound = () => {
     try {
-      const audioUrl = profileRef.current.notification_tone || '/ringtone.mp3';
-      const audio = new Audio(audioUrl);
-      audio.play().catch(e => console.log("Error al reproducir audio:", e));
+      const customTone = profileRef.current.notification_tone;
+      if (customTone) {
+        const audio = new Audio(customTone);
+        audio.play().catch(e => console.log("Error al reproducir audio personalizado:", e));
+        return; // IMPORTANTE: Si hay tono personalizado, no suena el de por defecto
+      }
+      
+      const audio = new Audio('/ringtone.mp3');
+      audio.play().catch(e => console.log("Error al reproducir audio por defecto:", e));
     } catch (e) {
       console.log("No se pudo reproducir el ringtone");
     }
@@ -4257,7 +4263,7 @@ function App() {
                       if (file) {
                         const reader = new FileReader();
                         reader.onloadend = () => {
-                          setProfile({ ...profile, notification_tone: reader.result });
+                          setProfile(prev => ({ ...prev, notification_tone: reader.result }));
                         };
                         reader.readAsDataURL(file);
                       }
