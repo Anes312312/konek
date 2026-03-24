@@ -405,15 +405,24 @@ function App() {
 
   const playNotificationSound = () => {
     try {
-      const customTone = profileRef.current.notification_tone;
-      if (customTone) {
-        const audio = new Audio(customTone);
-        audio.play().catch(e => console.log("Error al reproducir audio personalizado:", e));
-        return; // IMPORTANTE: Si hay tono personalizado, no suena el de por defecto
+      // Detener audio previo si existe
+      if (activeNotificationAudioRef.current) {
+        activeNotificationAudioRef.current.pause();
+        activeNotificationAudioRef.current = null;
       }
+
+      const customTone = profileRef.current.notification_tone;
+      let audio;
       
-      const audio = new Audio('/ringtone.mp3');
-      audio.play().catch(e => console.log("Error al reproducir audio por defecto:", e));
+      if (customTone) {
+        audio = new Audio(customTone);
+      } else {
+        audio = new Audio('/ringtone.mp3');
+      }
+
+      audio.loop = true; // Activar bucle
+      activeNotificationAudioRef.current = audio;
+      audio.play().catch(e => console.log("Error al reproducir audio:", e));
     } catch (e) {
       console.log("No se pudo reproducir el ringtone");
     }
@@ -597,6 +606,17 @@ function App() {
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const activeChatRef = useRef(null);
   const mundoFileInputRef = useRef(null);
+  
+  // Ref para manejar el sonido de notificación en bucle
+  const activeNotificationAudioRef = useRef(null);
+
+  // Detener el sonido cuando el usuario abre un chat o cambia de pestaña
+  useEffect(() => {
+    if (activeNotificationAudioRef.current) {
+      activeNotificationAudioRef.current.pause();
+      activeNotificationAudioRef.current = null;
+    }
+  }, [activeChat, activeTab]);
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -4262,7 +4282,7 @@ function App() {
                       const file = e.target.files[0];
                       if (file) {
                         try {
-                          const MAX_DURATION = 5; // Segundos m\u00e1ximos para el ringtone
+                          const MAX_DURATION = 20; // Corregido: 20 segundos para el ringtone
                           const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                           const arrayBuffer = await file.arrayBuffer();
                           const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
