@@ -588,7 +588,16 @@ function App() {
   useEffect(() => {
     // Solo guardar si el perfil tiene datos válidos (evitar resetear con valores iniciales vacíos si el componente se monta/desmonta)
     if (profile && profile.name) {
-      localStorage.setItem("konek_profile", JSON.stringify(profile));
+      try {
+        localStorage.setItem("konek_profile", JSON.stringify(profile));
+      } catch (e) {
+        console.error("Error saving profile to localStorage:", e);
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+          alert('Tu imagen de perfil es muy grande y no se pudo guardar localmente. Por favor, intenta con una imagen con menor tamaño o borra conversaciones antiguas.');
+          // Removemos la imagen gigante para que no rompa futuros guardados
+          setProfile(prev => ({ ...prev, photo: null }));
+        }
+      }
     }
   }, [profile]);
 
@@ -919,6 +928,8 @@ function App() {
           serverName && serverName !== "Mi Usuario" && serverName !== "Usuario";
         const hasRealLocalName =
           prev.name && prev.name !== "Mi Usuario" && prev.name !== "Usuario";
+        const descriptionIsDefault = 
+          !prev.description || prev.description === "¡Usando Konek Fun!";
         return {
           ...prev,
           // Si el servidor tiene un nombre real, usarlo (prioridad al servidor)
@@ -930,6 +941,8 @@ function App() {
               : prev.name,
           role: userData.role,
           number: userData.phone_number || prev.number,
+          photo: prev.photo ? prev.photo : (userData.profile_pic || null),
+          description: descriptionIsDefault && userData.status ? userData.status : prev.description,
         };
       });
       // Si el servidor dice que ya tiene nombre real, quitamos onboarding
@@ -1374,8 +1387,8 @@ function App() {
       const reader = new FileReader();
       reader.onloadend = () => {
         if (file.type === "image/gif") {
-          if (file.size > 2 * 1024 * 1024) {
-            alert("El GIF es demasiado grande (máximo 2MB).");
+          if (file.size > 800 * 1024) {
+            alert("El GIF es demasiado grande (máximo 800KB).");
             return;
           }
           setProfile((prev) => ({ ...prev, photo: reader.result }));
