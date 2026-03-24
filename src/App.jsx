@@ -394,9 +394,13 @@ function App() {
     }
   }, []);
 
+  // Ref para acceder al profile actualizado dentro de callbacks/closures
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+
   const playNotificationSound = () => {
     try {
-      const audioUrl = profile.notification_tone || '/ringtone.mp3';
+      const audioUrl = profileRef.current.notification_tone || '/ringtone.mp3';
       const audio = new Audio(audioUrl);
       audio.play().catch(e => console.log("Error al reproducir audio:", e));
     } catch (e) {
@@ -540,6 +544,15 @@ function App() {
     }
   });
 
+  // Cerrar menú contextual al hacer clic fuera
+  useEffect(() => {
+    if (!msgActionMenu) return;
+    const handler = () => setMsgActionMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [msgActionMenu]);
+
+  // Persistir estados vistos
   useEffect(() => {
     localStorage.setItem(
       "konek_viewed_statuses",
@@ -3160,11 +3173,26 @@ function App() {
                     (msg.sender_id === activeChat.id &&
                       msg.receiver_id === userId),
                 )
-                .map((msg) => (
+                .map((msg) => {
+                  // Long-press para mobile
+                  let longPressTimer = null;
+                  const handleTouchStart = () => {
+                    longPressTimer = setTimeout(() => {
+                      setMsgActionMenu(msg.id);
+                    }, 500);
+                  };
+                  const handleTouchEnd = () => {
+                    if (longPressTimer) clearTimeout(longPressTimer);
+                  };
+
+                  return (
                   <div
                     key={msg.id}
                     className={`message ${msg.sender_id === userId ? "me" : "other"}`}
-                    onContextMenu={(e) => { e.preventDefault(); setMsgActionMenu(msg.id); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMsgActionMenu(msg.id); }}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchEnd}
                     style={{ position: 'relative' }}
                   >
                     <div
@@ -3177,6 +3205,11 @@ function App() {
                     >
                       {msg.sender_id === userId ? profile.name : (contactAliases[msg.sender_id] || activeChat.name)}
                     </div>
+                    {msg.is_forwarded && (
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontStyle: 'italic', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Share2 size={11} /> Reenviado
+                      </div>
+                    )}
                     {msgActionMenu === msg.id && (
                        <div className="msg-action-menu" style={{ 
                          right: msg.sender_id === userId ? 10 : 'auto', 
@@ -3442,7 +3475,8 @@ function App() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
               {uploadProgress && (
                 <div className="message me" style={{ opacity: 0.8 }}>
