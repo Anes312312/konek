@@ -27,8 +27,10 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
     maxHttpBufferSize: 50 * 1024 * 1024,
-    pingTimeout: 60000,
-    pingInterval: 25000
+    // Configuraciones optimizadas para redes móviles y servidores con recursos limitados
+    pingTimeout: 120000,   // 2 minutos de tolerancia antes de desconectar
+    pingInterval: 30000,   // Enviar ping cada 30 segundos
+    transports: ['websocket', 'polling'] // Permitir ambos para mayor compatibilidad
 });
 
 // Forzar HTTPS en producción
@@ -48,6 +50,15 @@ app.use(express.static(distPath));
 
 process.on('uncaughtException', (err) => console.error('[FATAL]', err.message));
 process.on('unhandledRejection', (reason) => console.error('[UNHANDLED]', reason));
+
+// Manejo de señales de apagado (Render envía SIGTERM al reiniciar)
+process.on('SIGTERM', () => {
+    console.log('SIGTERM recibida. Cerrando servidor elegantemente...');
+    server.close(() => {
+        console.log('Proceso finalizado.');
+        process.exit(0);
+    });
+});
 
 // ===== HELPERS =====
 function getUsersList() {
@@ -859,17 +870,22 @@ const PORT = process.env.PORT || 5000;
 async function start() {
     await loadFromFirestore();
     server.listen(PORT, () => {
-        console.log(`\n🚀 Konek Fun en puerto ${PORT}`);
-        console.log(`   Usuarios: ${usersMap.size}`);
-        console.log(`   Admin: Panel separado (clave: ${ADMIN_KEY})\n`);
+        console.log('\n=======================================');
+        console.log(`🚀 Konek Fun CORRIENDO EN PUERTO: ${PORT}`);
+        console.log(`🏠 Host local: http://localhost:${PORT}`);
+        console.log('=======================================');
+        console.log(`   Usuarios cargados: ${usersMap.size}`);
+        console.log(`   Mundo posts: ${mundoMessages.length}`);
+        console.log(`   Admin Key: ${ADMIN_KEY}`);
+        console.log('=======================================\n');
 
         // Sistema Auto-Ping (Mantener despierto el servidor en Render)
-        // Evita la pantalla de "Service Waking Up" haciendo tráfico continuo y falso
         setInterval(() => {
             const axios = require('axios');
-            axios.get('https://konek.fun/api/ping')
-                .then(() => console.log('[AutoPing] Request automatica para evitar que Render se duerma OK'))
-                .catch(err => console.log('[AutoPing] Fallo (normal si el dominio aun no propaga):', err.message));
+            const targetUrl = `https://konek.fun/api/ping`;
+            axios.get(targetUrl)
+                .then(() => console.log(`[AutoPing] Request a ${targetUrl} OK`))
+                .catch(err => console.log(`[AutoPing] Fallo (es normal si es localhost o aun no propaga):`, err.message));
         }, 4 * 60 * 1000); // Envía una petición cada 4 minutos
     });
 }

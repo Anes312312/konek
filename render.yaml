@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: konek-chat
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/ping
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: ADMIN_KEY
+        value: konek_admin_2024
