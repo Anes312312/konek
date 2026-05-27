@@ -7,6 +7,7 @@ const fs = require('fs-extra');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { firestore } = require('./firebase.cjs');
+const infraController = require('./infra_controller.cjs');
 
 // ===== CONFIG =====
 const ADMIN_KEY = 'konek_admin_2024';
@@ -157,6 +158,15 @@ app.get('/api/admin/cleanup-all', async (req, res) => {
 app.get('/api/ping', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
 });
+
+// ===== INFRASTRUCTURE API =====
+app.get('/api/infra/settings', infraController.getSettings);
+app.post('/api/infra/settings', infraController.updateSettings);
+app.get('/api/infra/test/:service', infraController.testConnection);
+app.get('/api/infra/gitea/repos', infraController.getGiteaRepos);
+app.get('/api/infra/pocketbase/collections', infraController.getPocketbaseCollections);
+app.get('/api/infra/coolify/projects', infraController.getCoolifyProjects);
+app.post('/api/infra/coolify/deploy', infraController.deployCoolifyApp);
 
 // SPA fallback (AL FINAL)
 app.use((req, res, next) => {
@@ -879,14 +889,7 @@ async function start() {
         console.log(`   Admin Key: ${ADMIN_KEY}`);
         console.log('=======================================\n');
 
-        // Sistema Auto-Ping (Mantener despierto el servidor en Render)
-        setInterval(() => {
-            const axios = require('axios');
-            const targetUrl = `https://konek.fun/api/ping`;
-            axios.get(targetUrl)
-                .then(() => console.log(`[AutoPing] Request a ${targetUrl} OK`))
-                .catch(err => console.log(`[AutoPing] Fallo (es normal si es localhost o aun no propaga):`, err.message));
-        }, 4 * 60 * 1000); // Envía una petición cada 4 minutos
+        // Sistema Auto-Ping desactivado para servidor local
     });
 }
 start();

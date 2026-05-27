@@ -37,6 +37,13 @@ async function setupDatabase() {
             file_path TEXT,
             file_name TEXT,
             file_size INTEGER,
+            read INTEGER DEFAULT 0,
+            deleted_for TEXT DEFAULT '[]',
+            is_deleted_for_all INTEGER DEFAULT 0,
+            is_forwarded INTEGER DEFAULT 0,
+            game_type TEXT,
+            game_data TEXT DEFAULT '{}',
+            reactions TEXT DEFAULT '[]',
             timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
@@ -53,6 +60,21 @@ async function setupDatabase() {
             user_id TEXT,
             content TEXT,
             type TEXT, -- 'image', 'text'
+            media_url TEXT,
+            timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS mundo (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            display_name TEXT,
+            anonymous INTEGER DEFAULT 0,
+            text TEXT,
+            image TEXT,
+            type TEXT DEFAULT 'text',
+            file_info TEXT DEFAULT '{}',
+            reactions TEXT DEFAULT '[]',
+            profile_pic TEXT,
             timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
@@ -66,13 +88,27 @@ async function setupDatabase() {
     `);
 
     // Asegurar que las columnas nuevas existan si la DB ya estaba creada
-    try {
-        await db.run('ALTER TABLE users ADD COLUMN phone_number TEXT UNIQUE');
-    } catch (e) { }
+    const migrations = [
+        ['users', 'phone_number', 'TEXT UNIQUE'],
+        ['users', 'role', 'TEXT DEFAULT "user"'],
+        ['messages', 'read', 'INTEGER DEFAULT 0'],
+        ['messages', 'deleted_for', "TEXT DEFAULT '[]'"],
+        ['messages', 'is_deleted_for_all', 'INTEGER DEFAULT 0'],
+        ['messages', 'is_forwarded', 'INTEGER DEFAULT 0'],
+        ['messages', 'game_type', 'TEXT'],
+        ['messages', 'game_data', "TEXT DEFAULT '{}'"],
+        ['messages', 'reactions', "TEXT DEFAULT '[]'"],
+        ['statuses', 'media_url', 'TEXT'],
+        ['statuses', 'reactions', "TEXT DEFAULT '[]'"]
+    ];
 
-    try {
-        await db.run('ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"');
-    } catch (e) { }
+    for (const [table, col, def] of migrations) {
+        try {
+            await db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+        } catch (e) {
+            // Ignorar si la columna ya existe
+        }
+    }
 
     return db;
 }

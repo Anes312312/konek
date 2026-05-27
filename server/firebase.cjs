@@ -1,278 +1,299 @@
-const admin = require('firebase-admin');
+const { setupDatabase } = require('./database.cjs');
+const dbPromise = setupDatabase();
 
-let db = null;
-
-// ===== INICIALIZACIÓN =====
-if (!admin.apps.length) {
-    try {
-        if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-            const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-            admin.initializeApp({ credential: admin.credential.cert(sa) });
-            console.log('[Firebase] ✓ Inicializado con Service Account');
-        } else {
-            admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'konek-fun-chat-312' });
-            console.log('[Firebase] ⚠ Inicializado SIN credenciales (solo funciona en Google Cloud)');
-        }
-        db = admin.firestore();
-    } catch (error) {
-        console.error('[Firebase] ✗ Error fatal:', error.message);
-    }
-} else {
-    db = admin.firestore();
+async function getDb() {
+    return await dbPromise;
 }
 
-// ========================================
-// API DIRECTA con Firestore (sin SQL shim)
-// ========================================
 const firestore = {
-
     // ----- USUARIOS -----
     async getAllUsers() {
-        if (!db) return [];
+        const db = await getDb();
         try {
-            const snap = await db.collection('users').get();
-            return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            return await db.all('SELECT * FROM users');
         } catch (e) {
-            console.error('[Firestore] getAllUsers error:', e.message);
+            console.error('[SQLite] getAllUsers error:', e.message);
             return [];
         }
     },
 
     async getUser(id) {
-        if (!db || !id) return null;
+        if (!id) return null;
+        const db = await getDb();
         try {
-            const doc = await db.collection('users').doc(String(id)).get();
-            return doc.exists ? { id: doc.id, ...doc.data() } : null;
+            const u = await db.get('SELECT * FROM users WHERE id = ?', [String(id)]);
+            return u || null;
         } catch (e) {
-            console.error('[Firestore] getUser error:', e.message);
+            console.error('[SQLite] getUser error:', e.message);
             return null;
         }
     },
 
     async getUserByPhone(phone) {
-        if (!db || !phone) return null;
+        if (!phone) return null;
+        const db = await getDb();
         try {
-            const snap = await db.collection('users').where('phone_number', '==', phone).limit(1).get();
-            return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+            const u = await db.get('SELECT * FROM users WHERE phone_number = ?', [phone]);
+            return u || null;
         } catch (e) {
-            console.error('[Firestore] getUserByPhone error:', e.message);
+            console.error('[SQLite] getUserByPhone error:', e.message);
             return null;
         }
     },
 
     async getUserByPhoneExcluding(phone, excludeId) {
-        if (!db || !phone) return null;
+        if (!phone) return null;
+        const db = await getDb();
         try {
-            const snap = await db.collection('users').where('phone_number', '==', phone).get();
-            if (snap.empty) return null;
-            const match = snap.docs.find(doc => doc.id !== excludeId);
-            return match ? { id: match.id, ...match.data() } : null;
+            const u = await db.get('SELECT * FROM users WHERE phone_number = ? AND id != ?', [phone, excludeId]);
+            return u || null;
         } catch (e) {
-            console.error('[Firestore] getUserByPhoneExcluding error:', e.message);
+            console.error('[SQLite] getUserByPhoneExcluding error:', e.message);
             return null;
         }
     },
 
     async getAdmin() {
-        if (!db) return null;
+        const db = await getDb();
         try {
-            const snap = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-            return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+            const u = await db.get("SELECT * FROM users WHERE role = 'admin' LIMIT 1");
+            return u || null;
         } catch (e) {
-            console.error('[Firestore] getAdmin error:', e.message);
+            console.error('[SQLite] getAdmin error:', e.message);
             return null;
         }
     },
 
     async saveUser(id, data) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            // Limpiar undefined/null
-            const clean = {};
-            Object.keys(data).forEach(k => { clean[k] = data[k] ?? ''; });
-            await db.collection('users').doc(String(id)).set(clean, { merge: true });
+            const existing = await this.getUser(id);
+            if (existing) {
+                const username = data.username !== undefined ? data.username : existing.username;
+                const profile_pic = data.profile_pic !== undefined ? data.profile_pic : existing.profile_pic;
+                const status = data.status !== undefined ? data.status : existing.status;
+                const phone_number = data.phone_number !== undefined ? data.phone_number : existing.phone_number;
+                const role = data.role !== undefined ? data.role : existing.role;
+                await db.run(
+                    `UPDATE users SET username = ?, profile_pic = ?, status = ?, phone_number = ?, role = ? WHERE id = ?`,
+                    [username || '', profile_pic || '', status || '', phone_number || '', role || 'user', String(id)]
+                );
+            } else {
+                await db.run(
+                    `INSERT INTO users (id, username, profile_pic, status, phone_number, role) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [String(id), data.username || '', data.profile_pic || '', data.status || '', data.phone_number || '', data.role || 'user']
+                );
+            }
         } catch (e) {
-            console.error('[Firestore] saveUser error:', e.message);
+            console.error('[SQLite] saveUser error:', e.message);
         }
     },
 
     async deleteUser(id) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('users').doc(String(id)).delete();
+            await db.run('DELETE FROM users WHERE id = ?', [String(id)]);
         } catch (e) {
-            console.error('[Firestore] deleteUser error:', e.message);
+            console.error('[SQLite] deleteUser error:', e.message);
         }
     },
 
     async demoteOtherAdmins(keepId) {
-        if (!db || !keepId) return;
+        if (!keepId) return;
+        const db = await getDb();
         try {
-            const snap = await db.collection('users').where('role', '==', 'admin').get();
-            const batch = db.batch();
-            let count = 0;
-            snap.forEach(doc => {
-                if (doc.id !== keepId) {
-                    batch.update(doc.ref, { role: 'user' });
-                    count++;
-                }
-            });
-            if (count > 0) {
-                await batch.commit();
-                console.log(`[Firestore] Degradados ${count} admins duplicados`);
-            }
+            await db.run("UPDATE users SET role = 'user' WHERE role = 'admin' AND id != ?", [keepId]);
         } catch (e) {
-            console.error('[Firestore] demoteOtherAdmins error:', e.message);
+            console.error('[SQLite] demoteOtherAdmins error:', e.message);
         }
     },
 
     // ----- MENSAJES -----
     async getPrivateMessages(userId1, userId2) {
-        if (!db) return [];
+        const db = await getDb();
         try {
-            const snap = await db.collection('messages').orderBy('timestamp', 'asc').get();
-            return snap.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(m =>
-                    (m.sender_id === userId1 && m.receiver_id === userId2) ||
-                    (m.sender_id === userId2 && m.receiver_id === userId1)
-                );
+            const rows = await db.all(
+                `SELECT * FROM messages 
+                 WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+                   AND receiver_id != 'global'
+                 ORDER BY timestamp ASC`,
+                [userId1, userId2, userId2, userId1]
+            );
+            return rows.map(r => ({
+                id: r.id,
+                sender_id: r.sender_id,
+                receiver_id: r.receiver_id,
+                content: r.content,
+                message_type: r.type,
+                type: r.type,
+                file_name: r.file_name,
+                file_url: r.file_path,
+                read: !!r.read,
+                deleted_for: JSON.parse(r.deleted_for || '[]'),
+                is_deleted_for_all: !!r.is_deleted_for_all,
+                is_forwarded: !!r.is_forwarded,
+                gameType: r.game_type,
+                gameData: JSON.parse(r.game_data || '{}'),
+                reactions: JSON.parse(r.reactions || '[]'),
+                timestamp: r.timestamp
+            }));
         } catch (e) {
-            console.error('[Firestore] getPrivateMessages error:', e.message);
+            console.error('[SQLite] getPrivateMessages error:', e.message);
             return [];
         }
     },
 
     async getAllUserMessages(userId) {
-        if (!db || !userId) return [];
+        if (!userId) return [];
+        const db = await getDb();
         try {
-            const snap1 = await db.collection('messages').where('sender_id', '==', userId).get();
-            const snap2 = await db.collection('messages').where('receiver_id', '==', userId).get();
-
-            const messages = new Map();
-            snap1.forEach(doc => messages.set(doc.id, { id: doc.id, ...doc.data() }));
-            snap2.forEach(doc => messages.set(doc.id, { id: doc.id, ...doc.data() }));
-
-            return Array.from(messages.values()).sort((a, b) => {
-                const t1 = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
-                const t2 = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
-                return t1 - t2;
-            });
+            const rows = await db.all(
+                `SELECT * FROM messages WHERE sender_id = ? OR receiver_id = ? ORDER BY timestamp ASC`,
+                [userId, userId]
+            );
+            return rows.map(r => ({
+                id: r.id,
+                sender_id: r.sender_id,
+                receiver_id: r.receiver_id,
+                content: r.content,
+                message_type: r.type,
+                type: r.type,
+                file_name: r.file_name,
+                file_url: r.file_path,
+                read: !!r.read,
+                deleted_for: JSON.parse(r.deleted_for || '[]'),
+                is_deleted_for_all: !!r.is_deleted_for_all,
+                is_forwarded: !!r.is_forwarded,
+                gameType: r.game_type,
+                gameData: JSON.parse(r.game_data || '{}'),
+                reactions: JSON.parse(r.reactions || '[]'),
+                timestamp: r.timestamp
+            }));
         } catch (e) {
-            console.error('[Firestore] getAllUserMessages error:', e.message);
+            console.error('[SQLite] getAllUserMessages error:', e.message);
             return [];
         }
     },
 
     async getGlobalMessages() {
-        if (!db) return [];
+        const db = await getDb();
         try {
-            const snap = await db.collection('messages')
-                .where('receiver_id', '==', 'global')
-                .orderBy('timestamp', 'asc').get();
-            return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const rows = await db.all(`SELECT * FROM messages WHERE receiver_id = 'global' ORDER BY timestamp ASC`);
+            return rows.map(r => ({
+                id: r.id,
+                sender_id: r.sender_id,
+                receiver_id: r.receiver_id,
+                content: r.content,
+                message_type: r.type,
+                type: r.type,
+                file_name: r.file_name,
+                file_url: r.file_path,
+                read: !!r.read,
+                deleted_for: JSON.parse(r.deleted_for || '[]'),
+                is_deleted_for_all: !!r.is_deleted_for_all,
+                is_forwarded: !!r.is_forwarded,
+                gameType: r.game_type,
+                gameData: JSON.parse(r.game_data || '{}'),
+                reactions: JSON.parse(r.reactions || '[]'),
+                timestamp: r.timestamp
+            }));
         } catch (e) {
-            console.error('[Firestore] getGlobalMessages error:', e.message);
+            console.error('[SQLite] getGlobalMessages error:', e.message);
             return [];
         }
     },
 
     async saveMessage(id, data) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('messages').doc(String(id)).set({
-                ...data,
-                timestamp: data.timestamp || admin.firestore.FieldValue.serverTimestamp()
-            });
+            const time = data.timestamp || new Date().toISOString();
+            const readVal = data.read ? 1 : 0;
+            const delVal = JSON.stringify(data.deleted_for || []);
+            const delAllVal = data.is_deleted_for_all ? 1 : 0;
+            const fwdVal = data.is_forwarded ? 1 : 0;
+            const gameDataVal = JSON.stringify(data.gameData || {});
+            const reactVal = JSON.stringify(data.reactions || []);
+
+            const existing = await db.get('SELECT id FROM messages WHERE id = ?', [String(id)]);
+            if (existing) {
+                await db.run(
+                    `UPDATE messages SET sender_id=?, receiver_id=?, content=?, type=?, file_path=?, file_name=?, read=?, deleted_for=?, is_deleted_for_all=?, is_forwarded=?, game_type=?, game_data=?, reactions=?, timestamp=? WHERE id=?`,
+                    [data.sender_id || '', data.receiver_id || '', data.content || '', data.message_type || data.type || 'text', data.file_url || data.file_path || '', data.file_name || '', readVal, delVal, delAllVal, fwdVal, data.gameType || '', gameDataVal, reactVal, time, String(id)]
+                );
+            } else {
+                await db.run(
+                    `INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_name, file_size, read, deleted_for, is_deleted_for_all, is_forwarded, game_type, game_data, reactions, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [String(id), data.sender_id || '', data.receiver_id || '', data.content || '', data.message_type || data.type || 'text', data.file_url || data.file_path || '', data.file_name || '', 0, readVal, delVal, delAllVal, fwdVal, data.gameType || '', gameDataVal, reactVal, time]
+                );
+            }
         } catch (e) {
-            console.error('[Firestore] saveMessage error:', e.message);
+            console.error('[SQLite] saveMessage error:', e.message);
         }
     },
 
     async deleteUserMessages(userId) {
-        if (!db || !userId) return;
+        if (!userId) return;
+        const db = await getDb();
         try {
-            const snap1 = await db.collection('messages').where('sender_id', '==', userId).get();
-            const snap2 = await db.collection('messages').where('receiver_id', '==', userId).get();
-            if (!snap1.empty || !snap2.empty) {
-                const batch = db.batch();
-                snap1.forEach(doc => batch.delete(doc.ref));
-                snap2.forEach(doc => batch.delete(doc.ref));
-                await batch.commit();
-            }
+            await db.run('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?', [userId, userId]);
         } catch (e) {
-            console.error('[Firestore] deleteUserMessages error:', e.message);
+            console.error('[SQLite] deleteUserMessages error:', e.message);
         }
     },
 
     async markMessagesRead(senderId, receiverId) {
-        if (!db) return;
+        const db = await getDb();
         try {
-            const snap = await db.collection('messages')
-                .where('sender_id', '==', senderId)
-                .where('receiver_id', '==', receiverId)
-                .get();
-            if (!snap.empty) {
-                const batch = db.batch();
-                let count = 0;
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.read) {
-                        batch.update(doc.ref, { read: true });
-                        count++;
-                    }
-                });
-                if (count > 0) {
-                    await batch.commit();
-                }
-            }
+            await db.run('UPDATE messages SET read = 1 WHERE sender_id = ? AND receiver_id = ?', [senderId, receiverId]);
         } catch (e) {
-            console.error('[Firestore] markMessagesRead error:', e.message);
+            console.error('[SQLite] markMessagesRead error:', e.message);
         }
     },
 
     async deleteMessageLogic(messageId, userId, type, memoryObj) {
-        if (!db || !messageId) return;
+        if (!messageId) return;
+        const db = await getDb();
         try {
-            const docRef = db.collection('messages').doc(String(messageId));
-            const doc = await docRef.get();
-            if (!doc.exists) return;
-            const data = doc.data();
-            
+            const m = await db.get('SELECT * FROM messages WHERE id = ?', [String(messageId)]);
+            if (!m) return;
             if (type === 'me') {
-                const deleted_for = data.deleted_for || [];
+                const deleted_for = JSON.parse(m.deleted_for || '[]');
                 if (!deleted_for.includes(userId)) {
                     deleted_for.push(userId);
-                    await docRef.update({ deleted_for });
+                    await db.run('UPDATE messages SET deleted_for = ? WHERE id = ?', [JSON.stringify(deleted_for), String(messageId)]);
                 }
             } else if (type === 'everyone') {
-                // Solo el remitente o admin pueden borrar para todos
-                if (data.sender_id === userId || data.role === 'admin') {
-                    await docRef.update({
-                        is_deleted_for_all: true,
-                        content: '',
-                        file_url: null,
-                        message_type: 'text'
-                    });
+                if (m.sender_id === userId) {
+                    await db.run(
+                        "UPDATE messages SET is_deleted_for_all = 1, content = '', file_path = '', file_name = '', type = 'text' WHERE id = ?",
+                        [String(messageId)]
+                    );
                 }
             }
         } catch (e) {
-            console.error('[Firestore] deleteMessageLogic error:', e.message);
+            console.error('[SQLite] deleteMessageLogic error:', e.message);
         }
     },
 
     // ----- ESTADOS -----
     async getStatuses() {
-        if (!db) return [];
+        const db = await getDb();
         try {
-            const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const snap = await db.collection('statuses')
-                .where('timestamp', '>', cutoff)
-                .orderBy('timestamp', 'desc').get();
+            const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const rows = await db.all('SELECT * FROM statuses WHERE timestamp > ? ORDER BY timestamp DESC', [cutoff]);
+            const statuses = rows.map(r => ({
+                id: r.id,
+                user_id: r.user_id,
+                content: r.content,
+                type: r.type,
+                media_url: r.media_url,
+                timestamp: r.timestamp
+            }));
 
-            const statuses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            // Enriquecer con datos de usuario
+            // Enriquecer
             const userIds = [...new Set(statuses.map(s => s.user_id))];
             const userMap = {};
             for (const uid of userIds) {
@@ -286,195 +307,195 @@ const firestore = {
                 profile_pic: userMap[s.user_id]?.profile_pic || ''
             }));
         } catch (e) {
-            console.error('[Firestore] getStatuses error:', e.message);
+            console.error('[SQLite] getStatuses error:', e.message);
             return [];
         }
     },
 
     async saveStatus(id, data) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('statuses').doc(String(id)).set({
-                ...data,
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const time = data.timestamp || new Date().toISOString();
+            await db.run(
+                'INSERT OR REPLACE INTO statuses (id, user_id, content, type, media_url, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                [String(id), data.userId || data.user_id, data.content || '', data.type || 'text', data.media_url || '', time]
+            );
         } catch (e) {
-            console.error('[Firestore] saveStatus error:', e.message);
+            console.error('[SQLite] saveStatus error:', e.message);
         }
     },
 
     async deleteStatus(id) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('statuses').doc(String(id)).delete();
+            await db.run('DELETE FROM statuses WHERE id = ?', [String(id)]);
         } catch (e) {
-            console.error('[Firestore] deleteStatus error:', e.message);
+            console.error('[SQLite] deleteStatus error:', e.message);
         }
     },
 
     async deleteUserStatuses(userId) {
-        if (!db || !userId) return;
+        if (!userId) return;
+        const db = await getDb();
         try {
-            const snap = await db.collection('statuses').where('user_id', '==', userId).get();
-            if (!snap.empty) {
-                const batch = db.batch();
-                snap.forEach(doc => batch.delete(doc.ref));
-                await batch.commit();
-            }
+            await db.run('DELETE FROM statuses WHERE user_id = ?', [userId]);
         } catch (e) {
-            console.error('[Firestore] deleteUserStatuses error:', e.message);
+            console.error('[SQLite] deleteUserStatuses error:', e.message);
         }
     },
 
     // ----- DELETED IDS -----
     async isDeleted(id) {
-        if (!db || !id) return false;
+        if (!id) return false;
+        const db = await getDb();
         try {
-            const doc = await db.collection('deleted_ids').doc(String(id)).get();
-            return doc.exists;
+            const row = await db.get('SELECT id FROM deleted_ids WHERE id = ?', [String(id)]);
+            return !!row;
         } catch (e) {
             return false;
         }
     },
 
     async markDeleted(id) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('deleted_ids').doc(String(id)).set({
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
-            });
+            await db.run('INSERT OR IGNORE INTO deleted_ids (id) VALUES (?)', [String(id)]);
         } catch (e) {
-            console.error('[Firestore] markDeleted error:', e.message);
+            console.error('[SQLite] markDeleted error:', e.message);
         }
     },
 
     // ----- UPLOADS -----
     async initUpload(id, fileName, totalSize) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('uploads').doc(String(id)).set({
-                file_name: fileName, total_size: totalSize, current_size: 0,
-                status: 'uploading', timestamp: admin.firestore.FieldValue.serverTimestamp()
-            });
+            await db.run(
+                'INSERT OR REPLACE INTO uploads (id, file_name, total_size, current_size, status) VALUES (?, ?, ?, 0, ?)',
+                [String(id), fileName, totalSize, 'uploading']
+            );
         } catch (e) {
-            console.error('[Firestore] initUpload error:', e.message);
+            console.error('[SQLite] initUpload error:', e.message);
         }
     },
 
     async addChunkSize(id, chunkSize) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('uploads').doc(String(id)).update({
-                current_size: admin.firestore.FieldValue.increment(chunkSize)
-            });
+            await db.run('UPDATE uploads SET current_size = current_size + ? WHERE id = ?', [chunkSize, String(id)]);
         } catch (e) {
-            console.error('[Firestore] addChunkSize error:', e.message);
+            console.error('[SQLite] addChunkSize error:', e.message);
         }
     },
 
     async getUpload(id) {
-        if (!db || !id) return null;
+        if (!id) return null;
+        const db = await getDb();
         try {
-            const doc = await db.collection('uploads').doc(String(id)).get();
-            return doc.exists ? { id: doc.id, ...doc.data() } : null;
+            return await db.get('SELECT * FROM uploads WHERE id = ?', [String(id)]);
         } catch (e) {
             return null;
         }
     },
 
     async completeUpload(id) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection('uploads').doc(String(id)).update({ status: 'completed' });
+            await db.run("UPDATE uploads SET status = 'completed' WHERE id = ?", [String(id)]);
         } catch (e) {
-            console.error('[Firestore] completeUpload error:', e.message);
+            console.error('[SQLite] completeUpload error:', e.message);
         }
     },
 
     // ----- MUNDO (Global Wall) -----
     async getMundoPosts(limit = 200) {
-        if (!db) return [];
+        const db = await getDb();
         try {
-            const snap = await db.collection("mundo")
-                .orderBy("timestamp", "asc")
-                .limitToLast(limit)
-                .get();
-            return snap.docs.map((doc) => {
-                const data = doc.data();
-                return {
-                    ...data,
-                    id: doc.id,
-                    timestamp: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : data.timestamp
-                };
-            });
+            const rows = await db.all('SELECT * FROM mundo ORDER BY timestamp ASC LIMIT ?', [limit]);
+            return rows.map(r => ({
+                id: r.id,
+                userId: r.user_id,
+                displayName: r.display_name,
+                anonymous: !!r.anonymous,
+                text: r.text,
+                image: r.image,
+                type: r.type,
+                fileInfo: JSON.parse(r.file_info || 'null'),
+                reactions: JSON.parse(r.reactions || '[]'),
+                profilePic: r.profile_pic,
+                timestamp: r.timestamp
+            }));
         } catch (e) {
-            console.error("[Firestore] getMundoPosts error:", e.message);
+            console.error('[SQLite] getMundoPosts error:', e.message);
             return [];
         }
     },
 
     async getUserMundoPosts(userId) {
-        if (!db || !userId) return [];
+        if (!userId) return [];
+        const db = await getDb();
         try {
-            const snap = await db.collection("mundo").where("userId", "==", userId).get();
-            return snap.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    ...data,
-                    id: doc.id,
-                    timestamp: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : data.timestamp
-                };
-            }).sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+            const rows = await db.all('SELECT * FROM mundo WHERE user_id = ? ORDER BY timestamp ASC', [userId]);
+            return rows.map(r => ({
+                id: r.id,
+                userId: r.user_id,
+                displayName: r.display_name,
+                anonymous: !!r.anonymous,
+                text: r.text,
+                image: r.image,
+                type: r.type,
+                fileInfo: JSON.parse(r.file_info || 'null'),
+                reactions: JSON.parse(r.reactions || '[]'),
+                profilePic: r.profile_pic,
+                timestamp: r.timestamp
+            }));
         } catch (e) {
-            console.error("[Firestore] getUserMundoPosts error:", e.message);
+            console.error('[SQLite] getUserMundoPosts error:', e.message);
             return [];
         }
     },
 
     async saveMundoPost(id, data) {
-        if (!db || !id) return;
+        if (!id) return;
+        const db = await getDb();
         try {
-            await db.collection("mundo").doc(String(id)).set({
-                ...data,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            const time = data.timestamp || new Date().toISOString();
+            const anon = data.anonymous ? 1 : 0;
+            await db.run(
+                'INSERT OR REPLACE INTO mundo (id, user_id, display_name, anonymous, text, image, type, file_info, reactions, profile_pic, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [String(id), data.userId, data.displayName, anon, data.text || '', data.image || null, data.type || 'text', JSON.stringify(data.fileInfo || null), JSON.stringify(data.reactions || []), data.profilePic || '', time]
+            );
         } catch (e) {
-            console.error("[Firestore] saveMundoPost error:", e.message);
+            console.error('[SQLite] saveMundoPost error:', e.message);
         }
     },
 
     async clearMundo() {
-        if (!db) return;
+        const db = await getDb();
         try {
-            const snap = await db.collection("mundo").get();
-            if (snap.empty) return;
-            const batch = db.batch();
-            snap.forEach((doc) => batch.delete(doc.ref));
-            await batch.commit();
-            console.log("[Cleanup] Mundo chat vaciado en Firestore");
+            await db.run('DELETE FROM mundo');
         } catch (e) {
-            console.error("[Firestore] clearMundo error:", e.message);
+            console.error('[SQLite] clearMundo error:', e.message);
         }
     },
 
     // ----- LIMPIEZA -----
     async clearAllCollections() {
-        if (!db) return;
-        const collections = ['users', 'messages', 'statuses', 'deleted_ids', 'uploads'];
-        for (const name of collections) {
+        const db = await getDb();
+        const tables = ['users', 'messages', 'statuses', 'deleted_ids', 'uploads', 'mundo'];
+        for (const name of tables) {
             try {
-                const snap = await db.collection(name).get();
-                if (!snap.empty) {
-                    const batch = db.batch();
-                    snap.forEach(doc => batch.delete(doc.ref));
-                    await batch.commit();
-                    console.log(`[Cleanup] ${name}: ${snap.size} docs eliminados`);
-                }
+                await db.run(`DELETE FROM ${name}`);
             } catch (e) {
-                console.error(`[Cleanup] ${name}: error - ${e.message}`);
+                console.error(`[SQLite Cleanup] ${name} error:`, e.message);
             }
         }
     }
 };
 
-module.exports = { admin, db, firestore };
+module.exports = { admin: { apps: { length: 1 } }, db: null, firestore };
