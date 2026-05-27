@@ -371,7 +371,7 @@ const infraController = {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${settings.coolify.token}`
                 },
-                body: JSON.stringify({ uuid: appId })
+                body: JSON.stringify({ uuid: appId, force: true })
             });
             if (response.ok) {
                 return res.json({
